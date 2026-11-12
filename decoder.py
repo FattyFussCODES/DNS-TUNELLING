@@ -67,9 +67,13 @@ def main():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # IPv6 if the host looks like an IPv6 address, else IPv4
+    family = socket.AF_INET6 if ":" in args.host else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_DGRAM)
     try:
-        sock.bind((args.host, args.port))
+        # IPv6 bind needs a 4-tuple: (host, port, flowinfo, scopeid)
+        bind_addr = (args.host, args.port, 0, 0) if family == socket.AF_INET6 else (args.host, args.port)
+        sock.bind(bind_addr)
     except PermissionError:
         print(f"Port {args.port} needs sudo (ports under 1024), or use --port 5353")
         raise SystemExit(1)

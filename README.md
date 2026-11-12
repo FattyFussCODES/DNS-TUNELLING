@@ -50,7 +50,9 @@ DNS-TUNELLING/
 ├── docs/
 │   ├── PROTOCOL.md       # protocol, packet format, limits
 │   ├── DOMAIN_SETUP.md   # pointing dnstunnel.cc.cd at your server
-│   └── TWO_LAPTOP_SETUP.md  # two-laptop test, no Mininet needed
+│   ├── TWO_LAPTOP_SETUP.md  # two-laptop test, no Mininet needed
+│   ├── PLAYIT_TEST.md    # internet test via Playit.gg, no card/VPS
+│   └── VM_DEPLOY.md      # permanent 1-year VM decoder (Oracle/Google)
 ├── test_roundtrip.py     # local loopback test, no Mininet needed
 ├── LICENSE
 └── README.md
@@ -86,12 +88,12 @@ other runs the encoder. See `docs/TWO_LAPTOP_SETUP.md` for the full
 steps. Short version:
 
 ```bash
-# Laptop A (decoder): find its Wi-Fi IP first, e.g. 192.168.1.5
-ip addr          # Linux, or ipconfig on Windows
-sudo python3 decoder.py --host 0.0.0.0 --port 53
+# Laptop A (decoder): your Wi-Fi IP is 192.168.29.184 (JioFiber, 192.168.29.x)
+ipconfig       # Windows, or ip addr on Linux
+python3 decoder.py --host 0.0.0.0 --port 5353   # start here, no admin needed
 
 # Laptop B (encoder): point at Laptop A's IP, not at 8.8.8.8
-python3 encoder.py examples/secret.txt --server 192.168.1.5 --port 53 --delay 0.05
+python3 encoder.py examples/secret.txt --server 192.168.29.184 --port 5353 --delay 0.05
 ```
 
 If port 53 is blocked, use 5353 on both sides instead, no sudo

