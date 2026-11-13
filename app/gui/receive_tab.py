@@ -28,7 +28,6 @@ class ReceiveTab(ttk.Frame):
         self.query_sink = None
         self._queue: queue.Queue = queue.Queue()
         self._log_lines = 0
-        self._slow = False
         self._rows = 0
         self._rows_capped = False
         self._build()
@@ -428,17 +427,16 @@ class ReceiveTab(ttk.Frame):
     # -- log ---------------------------------------------------------------
 
     def _log(self, message: str) -> None:
-        if self._log_lines >= LOG_LIMIT:
-            if not self._slow:
-                self._slow = True
-                self._append(f"[--:--:--] log truncated at {LOG_LIMIT} lines\n")
-            return
         self._append(f"[{stamp()}] {message}\n")
 
     def _append(self, text: str) -> None:
         self.log.configure(state="normal")
         self.log.insert("end", text)
-        self._log_lines += 1
+        self._log_lines += text.count("\n")
+        excess = self._log_lines - LOG_LIMIT
+        if excess > 0:
+            self.log.delete("1.0", f"{excess + 1}.0")
+            self._log_lines -= excess
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -447,7 +445,6 @@ class ReceiveTab(ttk.Frame):
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
         self._log_lines = 0
-        self._slow = False
 
     def _clear_results(self) -> None:
         self.last_result = None

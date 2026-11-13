@@ -9,21 +9,17 @@ APP_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = APP_DIR / "config.json"
 DOMAIN = "dnstunnel.cc.cd"
 
-DEFAULT_SERVER = "10.144.144.89"
-DEFAULT_PORT = 53
+DEFAULT_SERVER = "127.0.0.1"
+DEFAULT_PORT = 5353
 DEFAULT_DELAY = 0.01
 
-# Real addresses live here, as GUI presets, and nowhere else in the repo.
+# Loopback is universal; other addresses are entered by the user.
 PRESETS = [
-    {"label": "Skein - Aviral", "server": "10.144.144.89", "port": 53, "mode": "Skein"},
-    {"label": "Skein - Yennefer", "server": "10.144.144.1", "port": 53, "mode": "Skein"},
-    {"label": "Same Wi-Fi - Aviral", "server": "192.168.29.184", "port": 53, "mode": "Same Wi-Fi"},
-    {"label": "Public Relay - Yennefer", "server": "115.97.155.115", "port": 53, "mode": "Public Relay"},
     {"label": "Loopback", "server": "127.0.0.1", "port": 5353, "mode": "Loopback"},
     {"label": "Custom", "server": "", "port": 53, "mode": "Custom"},
 ]
 
-MODES = ["Skein", "Same Wi-Fi", "Public Relay", "Domain"]
+MODES = ["Custom", "Same Wi-Fi", "Public Relay", "Domain"]
 DOMAIN_MODE_SERVER = "8.8.8.8"
 
 DEFAULTS = {
@@ -32,7 +28,7 @@ DEFAULTS = {
     "delay": DEFAULT_DELAY,
     "received_dir": "received",
     "history_db": "history.db",
-    "mode": "Skein",
+    "mode": "Custom",
     # Domain mode stays gated until the direct public relay test has passed.
     "domain_verified": False,
 }
@@ -66,6 +62,9 @@ def load_config(path: str | Path = CONFIG_PATH) -> dict:
                 config[key] = str(value)
         except (TypeError, ValueError):
             continue
+    if config["mode"] == "Skein":
+        # Retired label; preserve the user's endpoint as a custom transport.
+        config["mode"] = "Custom"
     if config["mode"] not in MODES:
         config["mode"] = DEFAULTS["mode"]
         config["server"] = DEFAULTS["server"]

@@ -27,17 +27,18 @@ A Tkinter desktop app with five tabs: **Send**, **Receive**, **History**,
 
 ### 1. Start the receiver first
 
-**Receive** tab → Host `10.144.144.89`, Port `53` → **Start**. The status
-line turns green (`Listening on 10.144.144.89:53`) and the chunk table starts
-empty. Leave this window running.
+**Receive** tab → Host `127.0.0.1`, Port `5353` → **Start**. The status
+line turns green and the chunk table starts empty. Leave this window running.
+If port 5353 is occupied, choose another free UDP port.
 
 ### 2. Send a file
 
-**Send** tab → **Choose file** → Preset `Skein - Aviral` → Server
-`10.144.144.89`, Port `53` → **Send**. Select a Base32 chunk size from
-16–63 characters (32 by default) and a delay (0.01 seconds by default).
-The preview gives the actual chunk count and estimated time. The log shows
-the ACK count for each window of up to 10 chunks.
+**Send** tab → **Choose file** → Preset `Loopback` → **Send**. If you chose
+a different receiver port, enter it in the Send tab as well. For another
+machine, select `Custom` and enter your decoder's address and port.
+Select a Base32 chunk size from 16–63 characters (32 by default) and a delay
+(0.01 seconds by default). The preview shows the actual chunk count and
+estimated time; the log shows ACK counts for each window.
 
 ### 3. Check the result
 
@@ -48,8 +49,8 @@ Use **Compare with original...** to diff SHA256 against the source file.
 
 ![Receive tab](docs/screenshots/02-receive-tab.png)
 
-> The receive screenshot shows a local loopback transfer on a temporary port
-> and into a temporary folder. The steps above use the Skein laptop on port 53.
+> The screenshots show the earlier interface. The receive screenshot uses a
+> temporary loopback port and folder rather than the defaults above.
 
 ## Install and run
 
@@ -183,22 +184,16 @@ python -m pytest tests/ -v
 The suite covers protocol and chunking, selective ACK retries, UDP loopback,
 encryption, detection and reports.
 
-Last run on this machine, verbatim:
-
-```
-$ python -m pytest tests/ -q
-....................................................                     [100%]
-52 passed in 4.25s
-```
 
 ## Tabs
 
 - **Send** — file, real chunk/time estimate, 16–63-character chunk-size
   slider, 10-chunk ACK windows, delay slider, optional password, live log,
-  progress with chunks/sec and ETA, Cancel. Labels over 40 characters
-  trigger the detector's length rule.
+  progress with chunks/sec and ETA, Cancel. The log retains the newest 4,000
+  lines; labels over 40 characters trigger the detector's length rule.
 - **Receive** — host/port, start/stop, live chunk table with the actual
   queries, size/SHA256 verdicts, open file/folder, compare with original.
+  The log also retains the newest 4,000 lines.
 - **History** — every send and receive recorded in `history.db` (SQLite):
   date, filename, size, session, server, mode, chunks, result, time taken.
   Refresh, clear, export CSV, generate a report.
@@ -211,8 +206,8 @@ $ python -m pytest tests/ -q
   listening. Two self-tests: real encoder chunks get flagged, ordinary DNS
   names pass.
 - **Settings** — defaults, transport mode, receiver folder, history path,
-  Skein detection, About (with logo). Domain mode stays disabled behind a
-  warning until the public relay test is verified.
+  and About (with logo). Domain mode stays disabled behind a warning until
+  the public relay test is verified.
 
 ## Known limits
 

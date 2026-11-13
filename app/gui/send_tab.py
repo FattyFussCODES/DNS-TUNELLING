@@ -32,7 +32,6 @@ class SendTab(ttk.Frame):
         self._stream_len = 0
         self._acked = 0
         self._preview_header: dict | None = None
-        self._slow = False
         self._queue: queue.Queue = queue.Queue()
         self._cancel: threading.Event | None = None
         self._worker: threading.Thread | None = None
@@ -92,7 +91,9 @@ class SendTab(ttk.Frame):
         frame.columnconfigure(6, weight=1)
 
         ttk.Label(frame, text="Preset").grid(row=0, column=0, sticky="w")
-        self.preset_var = tk.StringVar(value=app_config.PRESETS[0]["label"])
+        self.preset_var = tk.StringVar(
+            value="Loopback" if self.cfg["server"] == "127.0.0.1" else "Custom"
+        )
         self.preset_box = ttk.Combobox(
             frame, textvariable=self.preset_var, state="readonly", width=24,
             values=[preset["label"] for preset in app_config.PRESETS],
@@ -348,7 +349,6 @@ class SendTab(ttk.Frame):
         chunk_size = self.chunk_size_var.get()
 
         self._clear_log()
-        self._slow = False
         self._started = time.monotonic()
         self._run_info = {}
         self._recorded = False
@@ -510,13 +510,14 @@ class SendTab(ttk.Frame):
         for preset in app_config.PRESETS:
             if preset["server"] and preset["server"] == server:
                 return preset["mode"]
-        return "Custom"
+        return "Custom" if self._mode == "Loopback" else self._mode
 
     def apply_config(self, config: dict) -> None:
         """Called by the Settings tab after a save."""
         self.cfg = dict(config)
         self.server_var.set(self.cfg["server"])
         self.port_var.set(str(self.cfg["port"]))
+        self.preset_var.set("Loopback" if self.cfg["server"] == "127.0.0.1" else "Custom")
         self.delay_var.set(self.cfg["delay"])
         self._on_delay_change()
         self._mode = self.cfg.get("mode", self._mode)
@@ -535,18 +536,16 @@ class SendTab(ttk.Frame):
     # -- log ---------------------------------------------------------------
 
     def _log(self, message: str) -> None:
-        if self._log_lines >= LOG_LIMIT:
-            if not self._slow:
-                self._slow = True
-                self._append("[--:--:--] log truncated at "
-                             f"{LOG_LIMIT} lines; the transfer continues\n")
-            return
         self._append(f"[{stamp()}] {message}\n")
 
     def _append(self, text: str) -> None:
         self.log.configure(state="normal")
         self.log.insert("end", text)
-        self._log_lines += 1
+        self._log_lines += text.count("\n")
+        excess = self._log_lines - LOG_LIMIT
+        if excess > 0:
+            self.log.delete("1.0", f"{excess + 1}.0")
+            self._log_lines -= excess
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -555,7 +554,6 @@ class SendTab(ttk.Frame):
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
         self._log_lines = 0
-        self._slow = False
 
     def shutdown(self) -> None:
         if self._cancel is not None:

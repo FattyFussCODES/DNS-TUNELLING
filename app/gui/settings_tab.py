@@ -1,10 +1,7 @@
-"""Settings tab: defaults, transport mode, peer-tool status, About."""
+"""Settings tab: defaults, transport mode and About."""
 
 from __future__ import annotations
 
-import shutil
-import subprocess
-import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -18,10 +15,9 @@ class SettingsTab(ttk.Frame):
         super().__init__(master, padding=12)
         self.cfg = dict(config)
         self.on_save = on_save
-        self._mode = self.cfg.get("mode", "Skein")
+        self._mode = self.cfg.get("mode", app_config.DEFAULTS["mode"])
         self._build()
         self._load_into_widgets()
-        self._refresh_status()
 
     # -- layout ------------------------------------------------------------
 
@@ -76,20 +72,9 @@ class SettingsTab(ttk.Frame):
         )
         self.domain_warning.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        status_frame = ttk.LabelFrame(self, text="Peer tools", padding=10)
-        status_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        status_frame.columnconfigure(1, weight=1)
-        self.skein_var = tk.StringVar(value="checking...")
-        ttk.Label(status_frame, text="Skein").grid(row=0, column=0, sticky="w")
-        ttk.Label(status_frame, textvariable=self.skein_var, style="Hint.TLabel").grid(
-            row=0, column=1, sticky="w", padx=(10, 0)
-        )
-        ttk.Button(status_frame, text="Re-check", command=self._refresh_status).grid(
-            row=0, column=2, sticky="e"
-        )
 
         about = ttk.LabelFrame(self, text="About", padding=10)
-        about.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        about.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         about.columnconfigure(1, weight=1)
 
         logo_path = APPLogo.logo()
@@ -158,7 +143,7 @@ class SettingsTab(ttk.Frame):
         self.delay_var.set(f"{float(self.cfg['delay']):.2f}")
         self.received_var.set(str(self.cfg["received_dir"]))
         self.history_var.set(str(self.cfg["history_db"]))
-        self.mode_var.set(self.cfg.get("mode", "Skein"))
+        self.mode_var.set(self.cfg.get("mode", app_config.DEFAULTS["mode"]))
         self._on_mode_change()
 
     def _on_mode_change(self) -> None:
@@ -179,8 +164,6 @@ class SettingsTab(ttk.Frame):
                 "Saving with Domain selected will ask you to confirm."
             )
 
-    def _refresh_status(self) -> None:
-        self.skein_var.set(_skein_status())
 
     # -- save --------------------------------------------------------------
 
@@ -213,7 +196,7 @@ class SettingsTab(ttk.Frame):
                     "Domain mode needs glue + NS records and a passing direct "
                     "public relay test. Tick the confirmation or pick another mode.",
                 )
-                self.mode_var.set(self.cfg.get("mode", "Skein"))
+                self.mode_var.set(self.cfg.get("mode", app_config.DEFAULTS["mode"]))
                 self._on_mode_change()
                 return
             if not messagebox.askyesno(
@@ -221,7 +204,7 @@ class SettingsTab(ttk.Frame):
                 "Domain mode sends the tunnel to 8.8.8.8 and relies on "
                 "ns1.dnstunnel.cc.cd glue plus an NS change. Enable it?",
             ):
-                self.mode_var.set(self.cfg.get("mode", "Skein"))
+                self.mode_var.set(self.cfg.get("mode", app_config.DEFAULTS["mode"]))
                 self._on_mode_change()
                 return
 
@@ -244,39 +227,9 @@ class SettingsTab(ttk.Frame):
         self.cfg = updated
         self.save_status.set(f"Saved to {written.name}")
         self._on_mode_change()
-        self._refresh_status()
         if self.on_save is not None:
             self.on_save(updated)
 
 
-def _run(cmd: list[str], timeout: float = 3.0) -> str | None:
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, check=False
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return (result.stdout or "").strip()
-
-
-def _process_running(name: str) -> bool:
-    if sys.platform.startswith("win"):
-        out = _run(["tasklist", "/FI", f"IMAGENAME eq {name}.exe", "/NH"])
-        return bool(out) and name.lower() in out.lower()
-    return shutil.which("pgrep") is not None and _run(["pgrep", "-x", name]) not in (None, "")
-
-
-def _skein_status() -> str:
-    cli = shutil.which("skein") or shutil.which("skein.exe")
-    if cli:
-        for args in (["peers"], ["status"]):
-            out = _run([cli, *args])
-            if out:
-                return "skein " + " ".join(args) + ": " + out.replace("\n", "; ")[:300]
-        return f"Skein CLI found at {cli} (no peers output)"
-    if _process_running("skeind"):
-        return ("Skein service 'skeind' is running, but no skein CLI is on PATH, "
-                "so peers cannot be read here. Open Skein Desktop to see them.")
-    return "Skein not detected, start Skein Desktop"
 
 
