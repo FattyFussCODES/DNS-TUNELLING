@@ -4,3 +4,7 @@ recovered_*
 /secret.txt
 .DS_Store
 .venv/
+.pytest_cache/
+received/
+history.db
+config.json

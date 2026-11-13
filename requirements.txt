@@ -1,0 +1,6 @@
+# Runtime dependency: AES-128 + HMAC encryption for the tunnel stream.
+# Without it the app falls back to a SHA256-XOR + HMAC layer and says so.
+cryptography>=42
+
+# Tests (pip install pytest)
+pytest>=8

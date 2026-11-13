@@ -9,12 +9,32 @@
 Header:
 
 ```json
-{"filename": "secret.txt", "size": 10, "sha256": "<64 hex chars>"}
+{"filename": "secret.txt", "size": 10, "sha256": "<64 hex chars>",
+ "compressed": false, "encrypted": false, "chunks": 10, "session": "482534"}
 ```
 
-Chunk count is deliberately not in the header, because it would depend
-on the header's own length. Completion is signalled by the END query
-instead.
+`size` and `sha256` describe the **original** file, before compression and
+encryption, so size/SHA256 are verified against the plaintext end to end.
+`compressed` and `encrypted` say which optional layers were applied.
+
+`chunks` lives inside the header, and the header's own length decides the
+chunk count, so the count is settled by iterating until it stops changing
+(at most a couple of rounds; the encoded stream only ever grows).
+
+## Layers, applied inside the stream
+
+Before Base32, and in this order:
+
+1. **compress** — zlib level 6, only when the file is larger than 1 KB.
+   A small file skips it, and the header says so.
+2. **encrypt** — only when a password is set. Fernet (AES-128-CBC +
+   HMAC-SHA256) with a key from PBKDF2-HMAC-SHA256 (200 000 iterations,
+   random 16-byte salt sent with the ciphertext). Without the
+   `cryptography` package the app falls back to a SHA256 keystream XOR
+   plus HMAC-SHA256 tag and records that in the blob's magic prefix.
+
+The receiver reverses it: decrypt, then decompress, then verify `size` and
+`sha256` against the header.
 
 ## Encoding
 
@@ -43,16 +63,19 @@ not mix with a partial earlier session.
 DNS packets are built by hand with the standard library only
 (`socket` + `struct`): a 12-byte header plus a question section of
 length-prefixed labels, a zero terminator, QTYPE and QCLASS. A
-response echoes the question and adds one A answer (127.0.0.1). The
+response echoes the question and adds one A answer (1.1.1.1). The
 encoder treats any response with a matching query ID as the ACK for
 that chunk and resends on timeout, up to 3 tries.
 
 ## Decoding
 
 The decoder stores chunks by sequence number. A retransmitted chunk
-just overwrites the same slot. On END it sorts the chunks, joins and
-decodes them, splits off the header, writes `recovered_<filename>`,
-and checks size and SHA256 against the header.
+just overwrites the same slot. On END it sorts the chunks **numerically**
+(string sorting would put `1000` before `999`), joins and decodes them,
+splits off the header, writes the file, and checks size and SHA256
+against the header. The CLI writes `recovered_<filename>` in the
+current folder; the GUI writes to its `received/` folder and adds
+`(1)`, `(2)` rather than overwriting.
 
 ## Worked example
 

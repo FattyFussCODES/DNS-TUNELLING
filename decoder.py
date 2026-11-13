@@ -2,137 +2,104 @@
 """
 Decoder - DNS tunnelling receiver (lab / own-machine testing only)
 
+Thin CLI wrapper around app.protocol.Receiver.
+
 Usage:
     sudo python3 decoder.py --host 0.0.0.0 --port 53
-    python3 decoder.py --host 127.0.0.1 --port 5353
+    python decoder.py --host 127.0.0.1 --port 5353 --out-dir received
 
-Listens for DNS queries ending in dnstunnel.cc.cd, stores the
-Base32 chunks by sequence number, and on the END query rebuilds
-the file as recovered_<filename>, checking size + SHA256.
+Listens for DNS queries ending in dnstunnel.cc.cd, stores the Base32 chunks
+by sequence number, and on the END query rebuilds the file, checking size
+and SHA256. Files land as recovered_<filename> (or in --out-dir).
 
-Run this only on a server you own. Never use it to collect data
-from someone else's machine or network.
+Run this only on a server you own.
 """
 
+from __future__ import annotations
+
 import argparse
-import base64
-import hashlib
-import json
-import socket
-import struct
+import sys
+import time
 
-DOMAIN = "dnstunnel.cc.cd"
-DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 53
+from app import config, protocol
 
 
-def parse_dns_query(packet):
-    qid, _flags, qdcount, _, _, _ = struct.unpack(">HHHHHH", packet[:12])
-    if qdcount != 1:
-        raise ValueError("expected exactly one question")
-    labels, pos = [], 12
-    while packet[pos] != 0:
-        length = packet[pos]
-        labels.append(packet[pos + 1:pos + 1 + length].decode())
-        pos += 1 + length
-    pos += 1
-    question = packet[12:pos + 4]
-    return qid, ".".join(labels), question
-
-
-def build_dns_response(qid, question):
-    header = struct.pack(">HHHHHH", qid, 0x8180, 1, 1, 0, 0)
-    answer = struct.pack(">HHHIH", 0xC00C, 1, 1, 60, 4) + bytes([127, 0, 0, 1])
-    return header + question + answer
-
-
-def parse_qname(qname):
-    labels = qname.rstrip(".").split(".")
-    domain_labels = DOMAIN.split(".")
-    if labels[-len(domain_labels):] != domain_labels:
-        return None
-    body = labels[:-len(domain_labels)]
-    if not body:
-        return None
-    if body[0].upper() == "END":
-        return ("END", None, body[1] if len(body) > 1 else "")
-    if len(body) < 3:
-        return None
-    return (body[0], body[1], body[2])
-
-
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Decode DNS-tunnelled data")
-    parser.add_argument("--host", default=DEFAULT_HOST)
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    args = parser.parse_args()
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=config.DEFAULT_PORT,
+                        help="UDP port, 53 needs Admin/sudo (default: %(default)s)")
+    parser.add_argument("--out-dir", default=".",
+                        help="where rebuilt files go (default: current folder)")
+    parser.add_argument("--prefix", default="recovered_",
+                        help="filename prefix (default: %(default)s)")
+    parser.add_argument("--password", default=None,
+                        help="decrypt streams sent with this password")
+    parser.add_argument("--domain", default=protocol.DOMAIN,
+                        help="tunnel suffix (default: %(default)s)")
+    args = parser.parse_args(argv)
 
-    # IPv6 if the host looks like an IPv6 address, else IPv4
-    family = socket.AF_INET6 if ":" in args.host else socket.AF_INET
-    sock = socket.socket(family, socket.SOCK_DGRAM)
+    def on_event(event: dict) -> None:
+        kind = event["type"]
+        if kind == "chunk":
+            print(f"Session {event['session']}: chunk {event['seq']:>3} "
+                  f"({event['count']} stored)", flush=True)
+        elif kind == "duplicate":
+            print(f"Session {event['session']}: chunk {event['seq']:>3} duplicate "
+                  f"({event['count']} stored)", flush=True)
+        elif kind == "complete":
+            print(f"Session {event['session']}: rebuilt {event['path']}")
+            print(f"  size: {event['size']} / {event['expected_size']}")
+            print(f"  size match: {event['size_match']}")
+            print(f"  sha256: {event['sha256'][:16]}...")
+            print(f"  sha256 match: {event['sha256_match']}")
+            print(f"  time: {event['elapsed']:.2f}s")
+            diff = "fc" if sys.platform.startswith("win") else "diff"
+            print(f"  Check with: {diff} {event['filename']} {event['path']}", flush=True)
+        elif kind == "end_empty":
+            print(event["message"])
+        elif kind == "error":
+            print(f"Error: {event['message']}")
+        elif kind == "foreign":
+            print(f"Ignoring foreign query ({event['ignored']} so far): "
+                  f"{event['qname'][:80]}")
+        elif kind == "ignored":
+            print(f"Ignoring bad packet: {event['reason']}")
+
+    receiver = protocol.Receiver(
+        args.host,
+        args.port,
+        out_dir=args.out_dir,
+        prefix=args.prefix,
+        password=args.password,
+        domain=args.domain,
+        on_event=on_event,
+    )
     try:
-        # IPv6 bind needs a 4-tuple: (host, port, flowinfo, scopeid)
-        bind_addr = (args.host, args.port, 0, 0) if family == socket.AF_INET6 else (args.host, args.port)
-        sock.bind(bind_addr)
+        receiver.start()
     except PermissionError:
-        print(f"Port {args.port} needs sudo (ports under 1024), or use --port 5353")
-        raise SystemExit(1)
-    print(f"Decoder listening on {args.host}:{args.port} for *.{DOMAIN}")
-    print("Waiting for chunks... (Ctrl+C to stop)")
+        if args.port < 1024:
+            print(f"Port {args.port} needs sudo/Admin (ports under 1024).")
+        else:
+            print(f"Port {args.port} refused: it is already in use by another "
+                  "process (Windows reports that as permission denied). "
+                  "Pick a free port with --port.")
+        return 1
+    except OSError as exc:
+        print(f"Cannot listen on {args.host}:{args.port}: {exc}")
+        return 1
 
-    sessions = {}
+    print(f"Decoder listening on {args.host}:{args.port} for *.{args.domain}")
+    print("Waiting for chunks... (Ctrl+C to stop)")
     try:
         while True:
-            packet, addr = sock.recvfrom(2048)
-            try:
-                qid, qname, question = parse_dns_query(packet)
-            except Exception as e:
-                print(f"Ignoring bad packet: {e}")
-                continue
-            # ACK every query, so the encoder knows it arrived
-            sock.sendto(build_dns_response(qid, question), addr)
-
-            parsed = parse_qname(qname)
-            if parsed is None:
-                continue
-            seq, chunk, session = parsed
-            store = sessions.setdefault(session, {})
-            if seq == "END":
-                if not store:
-                    print(f"Session {session}: END with no chunks")
-                    continue
-                ordered = [store[k] for k in sorted(store)]
-                encoded = "".join(ordered).upper()
-                encoded += "=" * (-len(encoded) % 8)
-                try:
-                    raw = base64.b32decode(encoded)
-                except Exception as e:
-                    print(f"Session {session}: Base32 decode failed: {e}")
-                    continue
-                header_json, _, file_bytes = raw.partition(b"\n")
-                try:
-                    header = json.loads(header_json)
-                except Exception as e:
-                    print(f"Session {session}: bad header: {e}")
-                    continue
-                out_name = "recovered_" + header["filename"]
-                with open(out_name, "wb") as f:
-                    f.write(file_bytes)
-                size_ok = len(file_bytes) == header["size"]
-                sha_ok = hashlib.sha256(file_bytes).hexdigest() == header["sha256"]
-                print(f"Session {session}: rebuilt {out_name}")
-                print(f"  size match: {size_ok} ({len(file_bytes)} / {header['size']})")
-                print(f"  sha256 match: {sha_ok}")
-                print(f"  Check with: diff {header['filename']} {out_name}")
-                del sessions[session]
-            else:
-                store[seq] = chunk
-                print(f"Session {session}: chunk {seq} ({len(store)} stored)", flush=True)
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
-        sock.close()
+        receiver.stop()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
