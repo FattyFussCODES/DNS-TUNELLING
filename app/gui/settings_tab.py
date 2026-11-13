@@ -10,6 +10,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .. import __version__, config as app_config
+from . import BRAND_NAME, APPLogo, load_image
 
 
 class SettingsTab(ttk.Frame):
@@ -94,15 +95,29 @@ class SettingsTab(ttk.Frame):
 
         about = ttk.LabelFrame(self, text="About", padding=10)
         about.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        about.columnconfigure(1, weight=1)
+
+        logo_path = APPLogo.logo()
+        if logo_path is not None:
+            try:
+                self._about_logo = load_image(about, logo_path, width=200)
+                ttk.Label(about, image=self._about_logo).grid(
+                    row=0, column=0, rowspan=2, sticky="w", padx=(0, 16)
+                )
+            except Exception:
+                self._about_logo = None
+
         ttk.Label(
             about,
-            text=(
-                f"DNS Tunnel - Lab File Transfer {__version__}\n"
-                f"Author: {'Aviral Bohra'}\n"
-                "Lab only: your own machines, own files, own decoder. MIT licence."
-            ),
+            text=f"{BRAND_NAME} v{__version__}",
+            font=("Segoe UI", 12, "bold"),
+        ).grid(row=0, column=1, sticky="sw")
+        ttk.Label(
+            about,
+            text=("by Aviral Bohra\n"
+                  "Lab only: your own machines, own files, own decoder. MIT licence."),
             justify="left",
-        ).grid(row=0, column=0, sticky="w")
+        ).grid(row=1, column=1, sticky="nw", pady=(2, 0))
 
         actions = ttk.Frame(self)
         actions.grid(row=4, column=0, sticky="ew", pady=(12, 0))

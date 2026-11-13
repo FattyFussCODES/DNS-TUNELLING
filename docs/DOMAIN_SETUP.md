@@ -1,4 +1,4 @@
-# Pointing dnstunnel.cc.cd at your server
+# DNSMuggle — pointing dnstunnel.cc.cd at your server
 
 Right now the domain is registered but has 0 DNS records and shows
 DNS Status: Unresolved. It does nothing until you point it at a

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Encoder - DNS tunnelling sender (lab / own-machine testing only)
+DNSMuggle encoder - send a file as DNS queries (lab / own-machine testing only)
 
 Thin CLI wrapper around app.protocol.send_file().
 

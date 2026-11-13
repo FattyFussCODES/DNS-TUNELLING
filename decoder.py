@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Decoder - DNS tunnelling receiver (lab / own-machine testing only)
+DNSMuggle decoder - receive a file as DNS queries (lab / own-machine testing only)
 
 Thin CLI wrapper around app.protocol.Receiver.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LAB ONLY Mininet topology for the DNS Tunnelling Exfiltrator.
+"""LAB ONLY Mininet topology for DNSMuggle.
 
     sudo mn --custom dns_topo.py --topo dnstun --test pingall
     # or interactively: sudo mn --custom dns_topo.py --topo dnstun

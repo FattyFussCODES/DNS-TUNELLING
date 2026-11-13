@@ -1,4 +1,4 @@
-"""DNS Tunnel - lab file transfer over hand-built DNS queries.
+"""DNSMuggle - send a file out hidden inside hand-built DNS queries.
 
 Lab only: your own files, your own machines, your own server.
 """

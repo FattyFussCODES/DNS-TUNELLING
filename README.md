@@ -1,4 +1,8 @@
-# DNS-TUNNELLING
+<p align="center">
+  <img src="docs/screenshots/dnsmuggle-logo.png" alt="DNSMuggle" width="300">
+</p>
+
+# DNSMuggle
 
 Smuggle a file out using only DNS queries — then watch it happen, verify it,
 catch it with a detector, and print a report. A lab demo of DNS tunnelling:
@@ -71,11 +75,12 @@ python -m app.main
 python3 -m app.main
 ```
 
-Optional, installs a `dnstunnel-app` command:
+Optional, installs the `dnsmuggle` command (plus `dnstunnel-app` as an alias
+from before the rename):
 
 ```bash
 python -m pip install .
-dnstunnel-app
+dnsmuggle
 ```
 
 Port **53 needs Admin/sudo**. Port **5353** does not — but on Windows both
@@ -124,17 +129,18 @@ The GUI previews this before you send, from the real stream, never a guess.
 ## Project structure
 
 ```
-DNS-TUNNELLING/
+DNSMuggle/
 ├── app/
-│   ├── main.py                 # entry: python -m app.main / dnstunnel-app
+│   ├── main.py                 # entry: python -m app.main / dnsmuggle
 │   ├── protocol.py             # packets, chunking, ACK/retry/END, Receiver
 │   ├── crypto.py               # Fernet + PBKDF2, XOR+HMAC fallback
 │   ├── compress.py             # zlib layer above 1 KB
-│   ├── detector.py             # length, entropy, rate rules; live monitor
+│   ├── detector.py             # length, entropy, rate rules (tap on Receiver)
 │   ├── history.py              # SQLite history.db, transfers table
 │   ├── report.py               # text/PDF reports into reports/
 │   ├── config.py               # presets, defaults, config.json load/save
 │   ├── utils.py                # sha256, size/time formatting, dedup paths
+│   ├── assets/                 # dnsmuggle-logo.png, dnsmuggle-icon.png/.ico
 │   └── gui/                    # main window + five tabs
 ├── encoder.py                  # CLI wrapper over app.protocol
 ├── decoder.py                  # CLI wrapper over app.protocol
@@ -150,9 +156,9 @@ DNS-TUNNELLING/
 │   ├── TWO_LAPTOP_SETUP.md     # same-Wi-Fi test
 │   ├── PLAYIT_TEST.md          # Playit.gg route
 │   ├── VM_DEPLOY.md            # permanent decoder VM
-│   └── screenshots/
+│   └── screenshots/            # logo + Send/Receive screenshots
 ├── requirements.txt
-├── pyproject.toml              # pip install . -> dnstunnel-app
+├── pyproject.toml              # pip install . -> "dnsmuggle" command
 └── README.md
 ```
 
@@ -205,14 +211,14 @@ $ python -m pytest tests/ -q
 - **Detector** — a passive tap on the **Receive tab's** listener: one socket,
   no second bind, so it can watch the same port as the receiver. Length,
   entropy and rate rules, queries-per-second chart on a Canvas, alerts list,
-  and a "Possible DNS tunnel detected" banner when two or more rules fire
+  and a "Possible DNS tunnelling detected" banner when two or more rules fire
   within 60 seconds. **Start monitoring** starts that shared listener if it
   is not running; **Stop monitoring** only detaches, the receiver keeps
   listening. Two self-tests: real encoder chunks get flagged, ordinary DNS
   names pass.
 - **Settings** — defaults, transport mode, receiver folder, history path,
-  Skein/Playit detection, About. Domain mode stays disabled behind a warning
-  until the public relay test is verified.
+  Skein/Playit detection, About (with logo). Domain mode stays disabled
+  behind a warning until the public relay test is verified.
 
 ## Known limits
 

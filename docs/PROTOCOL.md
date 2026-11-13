@@ -1,4 +1,4 @@
-# Protocol
+# DNSMuggle wire protocol
 
 ## Stream
 

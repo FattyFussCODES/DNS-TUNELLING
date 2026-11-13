@@ -1,4 +1,4 @@
-# Permanent decoder on a free cloud VM — 1-year setup
+# DNSMuggle — permanent decoder on a free cloud VM
 
 Plain idea first: a small free VM has its own real public IP,
 so the internet can reach it. The decoder runs on it all the
@@ -99,7 +99,7 @@ is smaller but easier to set up.
 
 ## Step 3: copy the decoder to the VM
 
-From your laptop, in the `DNS-TUNELLING` folder:
+From your laptop, in the `DNSMuggle` folder:
 
 ```bash
 # Oracle (user is ubuntu; replace <key.pem> and <VM-IP>)
@@ -134,7 +134,7 @@ On the VM, create `/etc/systemd/system/dns-decoder.service`:
 
 ```ini
 [Unit]
-Description=DNS Tunnel Decoder
+Description=DNSMuggle decoder
 After=network.target
 
 [Service]

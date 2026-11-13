@@ -1,4 +1,4 @@
-"""DNS tunnel wire protocol: hand-built packets, chunking, ACKs, rebuild.
+"""Wire protocol: hand-built DNS packets, chunking, ACKs, rebuild.
 
 No GUI and no CLI parsing in here. Two consumers drive this module:
 

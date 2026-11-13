@@ -1,4 +1,4 @@
-"""DNS tunnel detection: length, entropy and rate rules over live queries.
+"""Tunnel detection: length, entropy and rate rules over live queries.
 
 One layer: `Detector`. It owns no socket and never binds a port. The GUI
 feeds it through `protocol.Receiver.on_query`, i.e. it is a passive tap on

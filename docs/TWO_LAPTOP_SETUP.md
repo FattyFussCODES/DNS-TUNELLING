@@ -1,4 +1,4 @@
-# Two-laptop test, no Mininet needed — your setup
+# DNSMuggle — two-laptop test, no Mininet needed
 
 You have two laptops. That is the cleanest test: one is the sender,
 one is the receiver, on a real network, with no virtual machines.
@@ -59,7 +59,7 @@ Start with port 5353 — no admin rights needed, and it proves the
 code works before you fight Windows Firewall on port 53.
 
 ```powershell
-cd DNS-TUNELLING
+cd DNSMuggle
 python3 decoder.py --host 0.0.0.0 --port 5353
 ```
 
@@ -78,8 +78,8 @@ the tunnel logic is identical, only the port differs.
 
 ## Step 2: Laptop B, send a test file
 
-Copy the `DNS-TUNELLING` folder to Laptop B first (USB, or
-`git clone https://github.com/FattyFussCODES/DNS-TUNELLING.git`).
+Copy the `DNSMuggle` folder to Laptop B first (USB, or
+or clone your own copy of the repository).
 Then, in that folder on Laptop B:
 
 ```powershell

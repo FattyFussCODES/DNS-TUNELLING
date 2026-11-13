@@ -1,4 +1,4 @@
-# Internet test with Playit.gg — no card, no VPS
+# DNSMuggle — internet test with Playit.gg, no card, no VPS
 
 Plain idea first: Playit.gg is a free tunnel, not a DNS server.
 You run its agent on Laptop A. The agent connects *out* to
@@ -13,7 +13,7 @@ cannot be your domain's DNS server — see Limits below.
 ## What you need
 
 - Laptop A (decoder) and Laptop B (encoder), with the
-  `DNS-TUNELLING` folder on both.
+  `DNSMuggle` folder on both.
 - A free Playit.gg account — email only, no card.
 - Laptop B on a *different* network from home Wi-Fi for the
   real test (phone hotspot is fine).
@@ -26,7 +26,7 @@ the tunnel only moves packets, it does not fix the code.
 
 ## Step 2: start the decoder on Laptop A
 
-On Laptop A, in the `DNS-TUNELLING` folder:
+On Laptop A, in the `DNSMuggle` folder:
 
 ```powershell
 python3 decoder.py --host 127.0.0.1 --port 5353
@@ -72,7 +72,7 @@ is normal, and it is why this cannot be a DNS server (below).
 ## Step 5: send from Laptop B, from another network
 
 Put Laptop B on your phone's hotspot (not home Wi-Fi), then
-in the `DNS-TUNELLING` folder on Laptop B:
+in the `DNSMuggle` folder on Laptop B:
 
 ```powershell
 python3 encoder.py examples/secret.txt --server <playit-address> --port <playit-port> --delay 0.05

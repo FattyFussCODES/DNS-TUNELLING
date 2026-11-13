@@ -1,4 +1,4 @@
-# Test port forwarding first, before touching nameservers
+# DNSMuggle — test port forwarding before touching nameservers
 
 > **VERDICT for this connection — tested 2026-11-11, do not re-try:**
 > Your JioFiber router's WAN IP is `<ROUTER_WAN_IP>` (a private `10.`
@@ -91,7 +91,7 @@ Save it.
 
 ## Step 4: start the decoder on the laptop (Laptop A)
 
-In the `DNS-TUNELLING` folder on Laptop A, leave this running:
+In the `DNSMuggle` folder on Laptop A, leave this running:
 
 ```bash
 sudo python3 decoder.py --host 0.0.0.0 --port 53
