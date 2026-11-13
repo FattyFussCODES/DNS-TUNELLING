@@ -1,4 +1,4 @@
-# DNSMuggle — permanent decoder on a free cloud VM
+# DNSmuggle — permanent decoder on a free cloud VM
 
 Plain idea first: a small free VM has its own real public IP,
 so the internet can reach it. The decoder runs on it all the
@@ -134,7 +134,7 @@ On the VM, create `/etc/systemd/system/dns-decoder.service`:
 
 ```ini
 [Unit]
-Description=DNSMuggle decoder
+Description=DNSmuggle decoder
 After=network.target
 
 [Service]

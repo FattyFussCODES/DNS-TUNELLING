@@ -69,7 +69,7 @@ def main() -> int:
 
         traceback.print_exception(exc_type, exc_value, exc_tb)
         if root.winfo_exists():
-            messagebox.showerror("DNSMuggle error", f"{exc_type.__name__}: {exc_value}")
+            messagebox.showerror("DNSmuggle error", f"{exc_type.__name__}: {exc_value}")
 
     root.report_callback_exception = on_error
     MainWindow(root)

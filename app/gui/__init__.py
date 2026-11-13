@@ -10,7 +10,7 @@ from pathlib import Path
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
-BRAND_NAME = "DNSMuggle"
+BRAND_NAME = "DNSmuggle"
 BRAND_TAGLINE = "Smuggle a file out using only DNS queries"
 
 # The logo art sits on this near-black background.

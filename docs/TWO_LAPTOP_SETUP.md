@@ -1,4 +1,4 @@
-# DNSMuggle — two-laptop test, no Mininet needed
+# DNSmuggle — two-laptop test, no Mininet needed
 
 You have two laptops. That is the cleanest test: one is the sender,
 one is the receiver, on a real network, with no virtual machines.

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/screenshots/dnsmuggle-logo.png" alt="DNSMuggle" width="300">
+  <img src="docs/screenshots/dnsmuggle-logo.png" alt="DNSmuggle" width="300">
 </p>
 
-# DNSMuggle
+# DNSmuggle
 
 Smuggle a file out using only DNS queries — then watch it happen, verify it,
 catch it with a detector, and print a report. A lab demo of DNS tunnelling:
@@ -48,10 +48,8 @@ Use **Compare with original...** to diff SHA256 against the source file.
 
 ![Receive tab](docs/screenshots/02-receive-tab.png)
 
-> The screenshots were captured on this machine with the receiver on port
-> `15353`: port 53 was already bound by a Windows service and 5353 by mDNS.
-> On the Skein laptop the decoder owns port 53, which is what the steps above
-> use.
+> The receive screenshot shows a local loopback transfer on a temporary port
+> and into a temporary folder. The steps above use the Skein laptop on port 53.
 
 ## Install and run
 

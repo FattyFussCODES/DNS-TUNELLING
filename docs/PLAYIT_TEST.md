@@ -1,4 +1,4 @@
-# DNSMuggle — internet test with Playit.gg, no card, no VPS
+# DNSmuggle — internet test with Playit.gg, no card, no VPS
 
 Plain idea first: Playit.gg is a free tunnel, not a DNS server.
 You run its agent on Laptop A. The agent connects *out* to

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dnsmuggle"
 version = "1.0.0"
-description = "DNSMuggle: smuggle a file out using only DNS queries. Lab app with send, receive, verify, detect and report"
+description = "DNSmuggle: smuggle a file out using only DNS queries. Lab app with send, receive, verify, detect and report"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

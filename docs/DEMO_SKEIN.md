@@ -1,4 +1,4 @@
-# DNSMuggle demo — DNS tunnelling over Skein
+# DNSmuggle demo — DNS tunnelling over Skein
 
 Lab-only demo, on your own laptops, with your own test files.
 Written 2026-11-12 from the 2026-11-11 run, when the decoder was

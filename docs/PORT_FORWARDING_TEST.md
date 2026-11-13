@@ -1,4 +1,4 @@
-# DNSMuggle — test port forwarding before touching nameservers
+# DNSmuggle — test port forwarding before touching nameservers
 
 > **VERDICT for this connection — tested 2026-11-11, do not re-try:**
 > Your JioFiber router's WAN IP is `<ROUTER_WAN_IP>` (a private `10.`

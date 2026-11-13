@@ -48,7 +48,7 @@ def _yes_no(value) -> str:
 def transfer_lines(row: dict) -> list[str]:
     """The report body, shared by the text and PDF writers."""
     lines = [
-        f"DNSMuggle {__version__}",
+        f"DNSmuggle {__version__}",
         f"Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"Transfer id: {row['id']}",
         "",
@@ -151,7 +151,7 @@ def generate_pdf_report(
                 y -= line_height
             if index == 0:
                 y -= 4
-        pdf.setTitle(f"DNSMuggle transfer {row['id']} - {row['filename']}")
+        pdf.setTitle(f"DNSmuggle transfer {row['id']} - {row['filename']}")
         pdf.save()
         return target
     finally:
