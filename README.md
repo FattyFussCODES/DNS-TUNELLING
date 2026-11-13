@@ -152,7 +152,6 @@ DNSMuggle/
 │   ├── DEMO_SKEIN.md           # Skein mesh demo script
 │   ├── PORT_FORWARDING_TEST.md # public relay test
 │   ├── TWO_LAPTOP_SETUP.md     # same-Wi-Fi test
-│   ├── PLAYIT_TEST.md          # Playit.gg route
 │   ├── VM_DEPLOY.md            # permanent decoder VM
 │   └── screenshots/            # logo + Send/Receive screenshots
 ├── requirements.txt
@@ -188,8 +187,8 @@ Last run on this machine, verbatim:
 
 ```
 $ python -m pytest tests/ -q
-...................................................                      [100%]
-51 passed in 4.67s
+....................................................                     [100%]
+52 passed in 4.25s
 ```
 
 ## Tabs
@@ -212,8 +211,8 @@ $ python -m pytest tests/ -q
   listening. Two self-tests: real encoder chunks get flagged, ordinary DNS
   names pass.
 - **Settings** — defaults, transport mode, receiver folder, history path,
-  Skein/Playit detection, About (with logo). Domain mode stays disabled
-  behind a warning until the public relay test is verified.
+  Skein detection, About (with logo). Domain mode stays disabled behind a
+  warning until the public relay test is verified.
 
 ## Known limits
 

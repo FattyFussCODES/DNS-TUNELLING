@@ -80,17 +80,12 @@ class SettingsTab(ttk.Frame):
         status_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         status_frame.columnconfigure(1, weight=1)
         self.skein_var = tk.StringVar(value="checking...")
-        self.playit_var = tk.StringVar(value="checking...")
         ttk.Label(status_frame, text="Skein").grid(row=0, column=0, sticky="w")
         ttk.Label(status_frame, textvariable=self.skein_var, style="Hint.TLabel").grid(
             row=0, column=1, sticky="w", padx=(10, 0)
         )
-        ttk.Label(status_frame, text="Playit").grid(row=1, column=0, sticky="w")
-        ttk.Label(status_frame, textvariable=self.playit_var, style="Hint.TLabel").grid(
-            row=1, column=1, sticky="w", padx=(10, 0)
-        )
         ttk.Button(status_frame, text="Re-check", command=self._refresh_status).grid(
-            row=0, column=2, rowspan=2, sticky="e"
+            row=0, column=2, sticky="e"
         )
 
         about = ttk.LabelFrame(self, text="About", padding=10)
@@ -186,8 +181,6 @@ class SettingsTab(ttk.Frame):
 
     def _refresh_status(self) -> None:
         self.skein_var.set(_skein_status())
-        configured = str(self.cfg.get("playit_address") or "").strip()
-        self.playit_var.set(_playit_status(configured))
 
     # -- save --------------------------------------------------------------
 
@@ -287,16 +280,3 @@ def _skein_status() -> str:
     return "Skein not detected, start Skein Desktop"
 
 
-def _playit_status(configured: str) -> str:
-    cli = shutil.which("playit") or shutil.which("playit.exe")
-    if cli:
-        out = _run([cli, "status"])
-        if out:
-            return out.replace("\n", "; ")[:300]
-        return f"Playit CLI found at {cli}"
-    if _process_running("playit"):
-        base = "Playit agent is running (tunnel address not reported by CLI)"
-        return f"{base}; configured: {configured}" if configured else base
-    if configured:
-        return f"Playit not detected; configured address: {configured}"
-    return "Playit not detected, start the Playit agent and set playit_address in config.json"

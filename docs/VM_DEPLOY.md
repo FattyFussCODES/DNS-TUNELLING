@@ -23,9 +23,8 @@ rejected.
   app, or a parent's card **with their permission**, for
   verification only.
 - **No card at all:** you cannot create an Oracle, Google,
-  AWS or Azure free VM. Use `PLAYIT_TEST.md` tonight
-  (no card, internet test to your laptop) and the local
-  two-laptop test in `TWO_LAPTOP_SETUP.md`. Do not use
+  AWS or Azure free VM. Use the local two-laptop test in
+  `TWO_LAPTOP_SETUP.md`. Do not use
   obscure "free VPS, no card" sites found by search — the
   ones checked on 2026-11-11 were short trials (72 hours /
   30 days), waitlisted, or unverified, and none of them

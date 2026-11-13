@@ -23,9 +23,8 @@ PRESETS = [
     {"label": "Custom", "server": "", "port": 53, "mode": "Custom"},
 ]
 
-MODES = ["Skein", "Same Wi-Fi", "Public Relay", "Playit", "Domain"]
+MODES = ["Skein", "Same Wi-Fi", "Public Relay", "Domain"]
 DOMAIN_MODE_SERVER = "8.8.8.8"
-PLAYIT_DECODER_PORT = 5353
 
 DEFAULTS = {
     "server": DEFAULT_SERVER,
@@ -36,7 +35,6 @@ DEFAULTS = {
     "mode": "Skein",
     # Domain mode stays gated until the direct public relay test has passed.
     "domain_verified": False,
-    "playit_address": "",
 }
 
 RECEIVED_DIR = APP_DIR / "received"
@@ -70,6 +68,8 @@ def load_config(path: str | Path = CONFIG_PATH) -> dict:
             continue
     if config["mode"] not in MODES:
         config["mode"] = DEFAULTS["mode"]
+        config["server"] = DEFAULTS["server"]
+        config["port"] = DEFAULTS["port"]
     if not 1 <= config["port"] <= 65535:
         config["port"] = DEFAULTS["port"]
     if not 0.01 <= config["delay"] <= 1.0:
