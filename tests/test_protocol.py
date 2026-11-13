@@ -6,6 +6,9 @@ import base64
 import json
 import os
 import struct
+import socket
+
+import pytest
 
 from app import protocol
 from app.utils import unique_path
@@ -50,6 +53,86 @@ def test_header_chunk_count_is_fixed_point():
         # Rebuilding from the header's own count must not shift it again.
         assert protocol.chunk_count(stream) == header["chunks"]
 
+
+@pytest.mark.parametrize("chunk_size", [16, 32, 47, 63])
+def test_chunk_sizes_and_fixed_point_header(chunk_size):
+    data = os.urandom(1200)
+    stream, header = protocol.build_stream(data, "f.bin", compress=False, chunk_size=chunk_size)
+    chunks = protocol.chunk_stream(stream, chunk_size)
+    assert len(chunks) == header["chunks"] == protocol.chunk_count(stream, chunk_size)
+    assert "".join(chunks) == stream
+    assert all(len(chunk) == chunk_size for chunk in chunks[:-1])
+    assert 0 < len(chunks[-1]) <= chunk_size
+
+
+@pytest.mark.parametrize("chunk_size", [0, 15, 64, -1, 32.5, True])
+def test_invalid_chunk_sizes_are_rejected(chunk_size):
+    with pytest.raises(ValueError):
+        protocol.build_stream(b"", "f", chunk_size=chunk_size)
+    with pytest.raises(ValueError):
+        protocol.chunk_stream("abc", chunk_size)
+
+
+@pytest.mark.parametrize("drop_seq", [None, 3])
+def test_windowed_transfer_out_of_order_and_selective_retry(tmp_path, monkeypatch, drop_seq):
+    source = tmp_path / "file"
+    source.write_bytes(b"payload")
+    header = {"size": 7, "sha256": "hash", "compressed": False, "encrypted": False}
+    monkeypatch.setattr(protocol, "build_stream", lambda *a, **kw: ("a" * 800, header))
+    clock = [0.0]
+    monkeypatch.setattr(protocol.time, "monotonic", lambda: clock[0])
+
+    class FakeSocket:
+        family = socket.AF_INET
+
+        def __init__(self):
+            self.replies = []
+            self.sends = []
+            self.timeout = 0
+
+        def sendto(self, packet, dest):
+            qid, name, _ = protocol.parse_dns_query(packet)
+            label = name.split(".")[0]
+            seq = int(label) if label != "END" else label
+            self.sends.append((seq, qid))
+            if seq == drop_seq and sum(s == seq for s, _ in self.sends) == 1:
+                return
+            response = struct.pack(">H", qid)
+            self.replies.insert(0, response)
+            if seq == 10:
+                self.replies.append(response)  # duplicate after its first ACK
+
+        def settimeout(self, timeout):
+            self.timeout = timeout
+
+        def recvfrom(self, size):
+            if self.replies:
+                return self.replies.pop(0), ("127.0.0.1", 53)
+            clock[0] += self.timeout
+            raise socket.timeout()
+
+        def close(self):
+            pass
+
+    sock = FakeSocket()
+    monkeypatch.setattr(protocol.socket, "socket", lambda *a: sock)
+    events = []
+    result = protocol.send_file(source, "127.0.0.1", 53, delay=0, timeout=1, on_event=events.append)
+    assert result["ok"] and result["sent"] == 25
+    assert [e["acked"] for e in events if e["type"] == "window"] == [10, 20, 25]
+    assert [(e["window"], e["windows"]) for e in events if e["type"] == "window"] == [
+        (1, 3), (2, 3), (3, 3)
+    ]
+    assert sorted(e["seq"] for e in events if e["type"] == "chunk") == list(range(1, 26))
+    assert sock.sends[-1][0] == "END"
+    assert len({qid for seq, qid in sock.sends if seq != drop_seq}) == 26 - (drop_seq is not None)
+    if drop_seq is None:
+        assert [seq for seq, _ in sock.sends] == list(range(1, 26)) + ["END"]
+        assert not [e for e in events if e["type"] == "retry"]
+    else:
+        assert [seq for seq, _ in sock.sends].count(drop_seq) == 2
+        assert [(e["seq"], e["attempt"]) for e in events if e["type"] == "retry"] == [(3, 2)]
+        assert all([seq for seq, _ in sock.sends].count(i) == 1 for i in range(1, 26) if i != drop_seq)
 
 def test_compress_and_encrypt_flags_match_reality():
     small = os.urandom(200)          # below the 1 KB threshold

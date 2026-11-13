@@ -11,7 +11,7 @@ DOMAIN = "dnstunnel.cc.cd"
 
 DEFAULT_SERVER = "10.144.144.89"
 DEFAULT_PORT = 53
-DEFAULT_DELAY = 0.05
+DEFAULT_DELAY = 0.01
 
 # Real addresses live here, as GUI presets, and nowhere else in the repo.
 PRESETS = [

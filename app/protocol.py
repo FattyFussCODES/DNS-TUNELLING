@@ -39,10 +39,11 @@ from .utils import sha256_bytes, unique_path
 
 DOMAIN = "dnstunnel.cc.cd"
 CHUNK_SIZE = 32
+WINDOW_SIZE = 10
 CHUNK_PAYLOAD_BYTES = CHUNK_SIZE * 5 // 8  # 20 bytes per chunk
 TIMEOUT = 2.0
 MAX_RETRIES = 3
-DEFAULT_DELAY = 0.2
+DEFAULT_DELAY = 0.01
 ACK_IP = "1.1.1.1"
 
 EventHook = Callable[[dict], None]
@@ -69,8 +70,14 @@ def _encode_stream(header: dict, payload: bytes) -> str:
     return _base32(blob + b"\n" + payload)
 
 
-def chunk_count(stream: str) -> int:
-    return -(-len(stream) // CHUNK_SIZE)
+def _validate_chunk_size(chunk_size: int) -> None:
+    if not isinstance(chunk_size, int) or isinstance(chunk_size, bool) or not 16 <= chunk_size <= 63:
+        raise ValueError("chunk_size must be an integer between 16 and 63")
+
+
+def chunk_count(stream: str, chunk_size: int = CHUNK_SIZE) -> int:
+    _validate_chunk_size(chunk_size)
+    return -(-len(stream) // chunk_size)
 
 
 def build_stream(
@@ -80,6 +87,7 @@ def build_stream(
     password: str | None = None,
     compress: bool = True,
     session: str | None = None,
+    chunk_size: int = CHUNK_SIZE,
 ) -> tuple[str, dict]:
     """Return (base32 stream, header). Header carries the true chunk count.
 
@@ -87,6 +95,7 @@ def build_stream(
     count, so the count is settled by iterating until it is stable. Each
     iteration can only grow the encoded stream, so this converges.
     """
+    _validate_chunk_size(chunk_size)
     session = session or new_session()
     original = file_bytes
     payload = original
@@ -110,7 +119,7 @@ def build_stream(
     }
     stream = _encode_stream(header, payload)
     for _ in range(8):
-        count = chunk_count(stream)
+        count = chunk_count(stream, chunk_size)
         if header["chunks"] == count:
             break
         header["chunks"] = count
@@ -118,8 +127,9 @@ def build_stream(
     return stream, header
 
 
-def chunk_stream(stream: str) -> list[str]:
-    return [stream[i:i + CHUNK_SIZE] for i in range(0, len(stream), CHUNK_SIZE)]
+def chunk_stream(stream: str, chunk_size: int = CHUNK_SIZE) -> list[str]:
+    _validate_chunk_size(chunk_size)
+    return [stream[i:i + chunk_size] for i in range(0, len(stream), chunk_size)]
 
 
 # --------------------------------------------------------------------------
@@ -220,22 +230,34 @@ def send_query(
     timeout: float = TIMEOUT,
     max_retries: int = MAX_RETRIES,
     on_retry: Callable[[int], None] | None = None,
+    qid: int | None = None,
+    cancel: threading.Event | None = None,
 ) -> bool:
     """Send one question, wait for a reply with the same QID. True on ACK."""
-    qid = random.randint(0, 65535)
+    qid = random.randint(0, 65535) if qid is None else qid
     packet = build_dns_query(qname, qid)
     dest = (server, port, 0, 0) if sock.family == socket.AF_INET6 else (server, port)
     for attempt in range(1, max_retries + 1):
+        if cancel is not None and cancel.is_set():
+            return False
         try:
             sock.sendto(packet, dest)
-            sock.settimeout(timeout)
-            resp, _ = sock.recvfrom(512)
-            if len(resp) >= 2 and struct.unpack(">H", resp[:2])[0] == qid:
-                return True
-        except socket.timeout:
+            deadline = time.monotonic() + timeout
+            while True:
+                if cancel is not None and cancel.is_set():
+                    return False
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                sock.settimeout(min(remaining, 0.1) if cancel is not None else remaining)
+                try:
+                    resp, _ = sock.recvfrom(512)
+                except socket.timeout:
+                    continue
+                if len(resp) >= 2 and struct.unpack(">H", resp[:2])[0] == qid:
+                    return True
             if on_retry is not None and attempt < max_retries:
                 on_retry(attempt + 1)
-            continue
         except OSError:
             return False
     return False
@@ -254,15 +276,17 @@ def send_file(
     domain: str = DOMAIN,
     cancel: threading.Event | None = None,
     on_event: EventHook | None = None,
+    chunk_size: int = CHUNK_SIZE,
 ) -> dict:
     """Stream a file out as DNS queries. Blocking; run it in a thread."""
     source = Path(path)
     data = source.read_bytes()
     session = new_session()
     stream, header = build_stream(
-        data, source.name, password=password, compress=compress, session=session
+        data, source.name, password=password, compress=compress, session=session,
+        chunk_size=chunk_size,
     )
-    chunks = chunk_stream(stream)
+    chunks = chunk_stream(stream, chunk_size)
     total = len(chunks)
 
     _emit(on_event, {
@@ -283,47 +307,131 @@ def send_file(
     started = time.monotonic()
     sent = 0
     try:
-        for seq, chunk in enumerate(chunks, start=1):
-            if cancel is not None and cancel.is_set():
-                return _cancelled(on_event, sent, total, session, header, started)
-            qname = f"{seq:03d}.{chunk}.{session}.{domain}"
-            acked = send_query(
-                sock, qname, server, port,
-                timeout=timeout, max_retries=max_retries,
-                on_retry=lambda attempt, s=seq: _emit(on_event, {
-                    "type": "retry", "seq": s, "total": total, "attempt": attempt,
-                }),
-            )
-            if not acked:
-                message = (
-                    f"Chunk {seq:03d} got no ACK after {max_retries} tries; stopped."
-                )
+        dest = (server, port, 0, 0) if family == socket.AF_INET6 else (server, port)
+        next_qid = random.randint(0, 65535)
+        windows = (total + WINDOW_SIZE - 1) // WINDOW_SIZE
+        def acknowledge(response: bytes, pending: dict) -> None:
+            nonlocal sent
+            if len(response) < 2:
+                return
+            qid = struct.unpack(">H", response[:2])[0]
+            item = pending.pop(qid, None)
+            if item is not None:
+                seq, qname = item[:2]
+                sent += 1
                 _emit(on_event, {
-                    "type": "chunk_failed", "seq": seq, "total": total,
-                    "attempts": max_retries,
+                    "type": "chunk", "seq": seq, "total": total,
+                    "session": session, "acked": True, "qname": qname,
                 })
-                _emit(on_event, {"type": "error", "message": message, "session": session})
-                return {
-                    "ok": False, "cancelled": False, "sent": sent, "total": total,
-                    "session": session, "header": header, "error": message,
-                    "elapsed": time.monotonic() - started,
-                }
-            sent += 1
-            _emit(on_event, {
-                "type": "chunk", "seq": seq, "total": total,
-                "session": session, "acked": True, "qname": qname,
-            })
-            if delay:
-                if cancel is not None:
-                    if cancel.wait(delay):
-                        return _cancelled(on_event, sent, total, session, header, started)
-                else:
-                    time.sleep(delay)
 
+        for window in range(windows):
+            pending = {}
+            for index in range(window * WINDOW_SIZE, min((window + 1) * WINDOW_SIZE, total)):
+                if cancel is not None and cancel.is_set():
+                    return _cancelled(on_event, sent, total, session, header, started)
+                seq = index + 1
+                qname = f"{seq:03d}.{chunks[index]}.{session}.{domain}"
+                qid = next_qid
+                next_qid = (next_qid + 1) & 0xffff
+                packet = build_dns_query(qname, qid)
+                try:
+                    sock.sendto(packet, dest)
+                except OSError as exc:
+                    message = f"Chunk {seq:03d} could not be sent: {exc}"
+                    _emit(on_event, {"type": "error", "message": message, "session": session})
+                    return {
+                        "ok": False, "cancelled": False, "sent": sent, "total": total,
+                        "session": session, "header": header, "error": message,
+                        "elapsed": time.monotonic() - started,
+                    }
+                pending[qid] = [seq, qname, packet, 1, time.monotonic() + timeout]
+                if delay:
+                    if cancel is not None:
+                        if cancel.wait(delay):
+                            return _cancelled(on_event, sent, total, session, header, started)
+                    else:
+                        time.sleep(delay)
+
+            while pending:
+                if cancel is not None and cancel.is_set():
+                    return _cancelled(on_event, sent, total, session, header, started)
+                # Drain queued ACKs before considering expired deadlines.
+                try:
+                    sock.settimeout(0.0)
+                    response, _ = sock.recvfrom(512)
+                except (BlockingIOError, socket.timeout):
+                    pass
+                except OSError as exc:
+                    message = f"Socket error while waiting for ACK: {exc}"
+                    _emit(on_event, {"type": "error", "message": message, "session": session})
+                    return {
+                        "ok": False, "cancelled": False, "sent": sent, "total": total,
+                        "session": session, "header": header, "error": message,
+                        "elapsed": time.monotonic() - started,
+                    }
+                else:
+                    acknowledge(response, pending)
+                    continue
+                now = time.monotonic()
+                for qid, item in list(pending.items()):
+                    seq, qname, packet, attempts, deadline = item
+                    if now < deadline:
+                        continue
+                    if attempts >= max_retries:
+                        message = f"Chunk {seq:03d} got no ACK after {max_retries} tries; stopped."
+                        _emit(on_event, {
+                            "type": "chunk_failed", "seq": seq, "total": total,
+                            "attempts": max_retries,
+                        })
+                        _emit(on_event, {"type": "error", "message": message, "session": session})
+                        return {
+                            "ok": False, "cancelled": False, "sent": sent, "total": total,
+                            "session": session, "header": header, "error": message,
+                            "elapsed": time.monotonic() - started,
+                        }
+                    try:
+                        sock.sendto(packet, dest)
+                    except OSError as exc:
+                        message = f"Chunk {seq:03d} could not be sent: {exc}"
+                        _emit(on_event, {"type": "error", "message": message, "session": session})
+                        return {
+                            "ok": False, "cancelled": False, "sent": sent, "total": total,
+                            "session": session, "header": header, "error": message,
+                            "elapsed": time.monotonic() - started,
+                        }
+                    item[3] = attempts + 1
+                    item[4] = time.monotonic() + timeout
+                    _emit(on_event, {
+                        "type": "retry", "seq": seq, "total": total, "attempt": attempts + 1,
+                    })
+                remaining = min(item[4] for item in pending.values()) - time.monotonic()
+                try:
+                    sock.settimeout(max(0.000001, min(remaining, 0.1) if cancel is not None else remaining))
+                    response, _ = sock.recvfrom(512)
+                except socket.timeout:
+                    continue
+                except OSError as exc:
+                    message = f"Socket error while waiting for ACK: {exc}"
+                    _emit(on_event, {"type": "error", "message": message, "session": session})
+                    return {
+                        "ok": False, "cancelled": False, "sent": sent, "total": total,
+                        "session": session, "header": header, "error": message,
+                        "elapsed": time.monotonic() - started,
+                    }
+                acknowledge(response, pending)
+            _emit(on_event, {
+                "type": "window", "window": window + 1, "windows": windows,
+                "acked": sent, "total": total,
+            })
+
+        if cancel is not None and cancel.is_set():
+            return _cancelled(on_event, sent, total, session, header, started)
         end_acked = send_query(
             sock, f"END.{session}.{domain}", server, port,
-            timeout=timeout, max_retries=max_retries,
+            timeout=timeout, max_retries=max_retries, qid=next_qid, cancel=cancel,
         )
+        if cancel is not None and cancel.is_set():
+            return _cancelled(on_event, sent, total, session, header, started)
         _emit(on_event, {"type": "end", "acked": end_acked, "session": session})
         elapsed = time.monotonic() - started
         result = {

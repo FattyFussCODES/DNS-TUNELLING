@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="decoder IP (default: %(default)s)")
     parser.add_argument("--port", type=int, default=config.DEFAULT_PORT,
                         help="decoder UDP port, 53 needs Admin/sudo (default: %(default)s)")
-    parser.add_argument("--delay", type=float, default=protocol.DEFAULT_DELAY,
+    parser.add_argument("--delay", type=float, default=config.DEFAULT_DELAY,
                         help="seconds between chunks (default: %(default)s)")
     parser.add_argument("--timeout", type=float, default=protocol.TIMEOUT,
                         help="ACK timeout per try (default: %(default)s)")
@@ -37,9 +37,20 @@ def main(argv: list[str] | None = None) -> int:
                         help="encrypt the stream with this password")
     parser.add_argument("--no-compress", action="store_true",
                         help="skip zlib compression even above 1 KB")
+    parser.add_argument("--chunk-size", type=int, default=protocol.CHUNK_SIZE,
+                        help="base32 characters per chunk (16-63; default: %(default)s)")
     parser.add_argument("--domain", default=protocol.DOMAIN,
                         help="tunnel suffix (default: %(default)s)")
     args = parser.parse_args(argv)
+    requested_chunk_size = args.chunk_size
+    args.chunk_size = max(16, min(63, requested_chunk_size))
+    if args.chunk_size != requested_chunk_size:
+        print(f"Warning: chunk size {requested_chunk_size} is outside 16-63; "
+              f"using {args.chunk_size}.", file=sys.stderr)
+    if args.chunk_size > 40:
+        print("Warning: Chunk size >40 will trigger the Detector length rule.",
+              file=sys.stderr)
+
 
     def on_event(event: dict) -> None:
         kind = event["type"]
@@ -81,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
             password=args.password,
             compress=not args.no_compress,
             timeout=args.timeout,
+            chunk_size=args.chunk_size,
             domain=args.domain,
             on_event=on_event,
         )

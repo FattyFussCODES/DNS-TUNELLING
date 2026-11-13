@@ -45,6 +45,7 @@ def _send_via_loopback(
     password: str | None = None,
     receiver_password: str | None = None,
     compress: bool = True,
+    chunk_size: int = protocol.CHUNK_SIZE,
 ) -> tuple[dict, list[dict], Path, Path]:
     port = _pick_port()
     out_dir = tmp_path / "received"
@@ -65,6 +66,7 @@ def _send_via_loopback(
             password=password,
             compress=compress,
             timeout=TIMEOUT,
+            chunk_size=chunk_size,
             on_event=events.append,
         )
         complete = _wait_for(events, "complete")
@@ -85,6 +87,37 @@ def test_loopback_small_file_is_byte_identical(tmp_path):
     assert Path(complete["path"]).read_bytes() == data
     assert complete["path"].endswith("secret.txt")
     assert complete["encrypted"] is False and complete["compressed"] is False
+
+
+def test_loopback_25_chunks_in_three_windows(tmp_path):
+    filename = "window.bin"
+    data = next(
+        b"x" * size for size in range(1000)
+        if protocol.build_stream(b"x" * size, filename, compress=False)[1]["chunks"] == 25
+    )
+    complete, events, _, _ = _send_via_loopback(
+        tmp_path, data, filename, compress=False,
+    )
+    received = [event["seq"] for event in events
+                if event["type"] == "chunk" and "length" in event]
+    assert received == list(range(1, 26))
+    assert [event["acked"] for event in events if event["type"] == "window"] == [10, 20, 25]
+    assert complete["size_match"] is True
+    assert complete["sha256_match"] is True
+    assert Path(complete["path"]).read_bytes() == data
+
+
+def test_loopback_maximum_chunk_size(tmp_path):
+    data = os.urandom(2048)
+    complete, events, _, _ = _send_via_loopback(
+        tmp_path, data, compress=False, chunk_size=63,
+    )
+    assert Path(complete["path"]).read_bytes() == data
+    assert complete["chunks"] == complete["expected_chunks"]
+    received = [event for event in events if event["type"] == "chunk" and "length" in event]
+    assert len(received) == complete["chunks"]
+    assert all(event["length"] == 63 for event in received[:-1])
+    assert 0 < received[-1]["length"] <= 63
 
 
 def test_loopback_compressed_and_encrypted_roundtrip(tmp_path):

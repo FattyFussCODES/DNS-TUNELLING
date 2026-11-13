@@ -29,6 +29,8 @@ class SendTab(ttk.Frame):
         self._file_path: Path | None = None
         self._file_bytes: bytes | None = None
         self._chunks = 0
+        self._stream_len = 0
+        self._acked = 0
         self._preview_header: dict | None = None
         self._slow = False
         self._queue: queue.Queue = queue.Queue()
@@ -40,6 +42,8 @@ class SendTab(ttk.Frame):
         self._run_info: dict = {}
         self._recorded = False
         self._build()
+        self.chunk_size_var.trace_add("write", self._on_chunk_size_change)
+        self.password_var.trace_add("write", lambda *_args: self._refresh_preview())
         self.after(80, self._poll)
 
     # -- layout ------------------------------------------------------------
@@ -142,8 +146,26 @@ class SendTab(ttk.Frame):
         ttk.Label(frame, text="Leave blank for no encryption. Receiver needs the same password.",
                   style="Hint.TLabel").grid(row=4, column=1, columnspan=4, sticky="w")
 
+        ttk.Label(frame, text="Chunk size").grid(row=5, column=0, sticky="w", pady=(8, 0))
+        chunk_row = ttk.Frame(frame)
+        chunk_row.grid(row=5, column=1, columnspan=5, sticky="ew", pady=(8, 0))
+        chunk_row.columnconfigure(0, weight=1)
+        self.chunk_size_var = tk.IntVar(value=protocol.CHUNK_SIZE)
+        self.chunk_scale = tk.Scale(
+            chunk_row, from_=16, to=63, resolution=1, orient="horizontal",
+            variable=self.chunk_size_var, showvalue=False, highlightthickness=0,
+        )
+        self.chunk_scale.grid(row=0, column=0, sticky="ew")
+        self.chunk_size_label_var = tk.StringVar(value=f"{protocol.CHUNK_SIZE} chars")
+        ttk.Label(chunk_row, textvariable=self.chunk_size_label_var,
+                  width=14).grid(row=0, column=1, padx=(12, 0))
+        self.chunk_warning_var = tk.StringVar(value="")
+        ttk.Label(frame, textvariable=self.chunk_warning_var, style="Hint.TLabel").grid(
+            row=6, column=1, columnspan=5, sticky="w"
+        )
+
         checks = ttk.Frame(frame)
-        checks.grid(row=5, column=0, columnspan=6, sticky="w", pady=(8, 0))
+        checks.grid(row=7, column=0, columnspan=6, sticky="w", pady=(8, 0))
         self.compress_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(checks, text="Compress (zlib, files over 1 KB)",
                         variable=self.compress_var,
@@ -174,6 +196,12 @@ class SendTab(ttk.Frame):
         self.rate_var = tk.StringVar(value="")
         ttk.Label(frame, textvariable=self.rate_var, style="Hint.TLabel").grid(
             row=1, column=2, sticky="e", pady=(6, 0)
+        )
+        self.window_var = tk.StringVar(
+            value=f"Window: {protocol.WINDOW_SIZE} chunks, ACK after {protocol.WINDOW_SIZE}"
+        )
+        ttk.Label(frame, textvariable=self.window_var, style="Hint.TLabel").grid(
+            row=2, column=0, columnspan=3, sticky="w", pady=(4, 0)
         )
         return frame
 
@@ -220,15 +248,18 @@ class SendTab(ttk.Frame):
             stream, header = protocol.build_stream(
                 self._file_bytes, name, password=self._password(),
                 compress=self.compress_var.get(),
+                chunk_size=self.chunk_size_var.get(),
             )
         except Exception as exc:  # crypto/stdlib failure should not kill the tab
             self.meta_var.set(f"Cannot preview this file: {exc}")
             self.sha_var.set("")
             self.estimate_var.set("")
             self._chunks = 0
+            self._stream_len = 0
             return
 
-        self._chunks = header["chunks"]
+        self._chunks = len(protocol.chunk_stream(stream, chunk_size=self.chunk_size_var.get()))
+        self._stream_len = len(stream)
         self._preview_header = header
         layers = "raw"
         if header["compressed"]:
@@ -237,12 +268,12 @@ class SendTab(ttk.Frame):
             layers += " + encrypted"
         self.meta_var.set(
             f"{name}  |  {format_size(len(self._file_bytes))}  |  "
-            f"{protocol.CHUNK_SIZE}-char chunks ({protocol.CHUNK_PAYLOAD_BYTES} B each)  |  {layers}"
+            f"{self.chunk_size_var.get()}-char chunks  |  {layers}"
         )
         self.sha_var.set(f"sha256 {header['sha256']}")
-        self._update_estimate(len(stream))
+        self._update_estimate()
 
-    def _update_estimate(self, stream_len: int | None = None) -> None:
+    def _update_estimate(self) -> None:
         if not self._chunks:
             self.estimate_var.set("")
             return
@@ -250,8 +281,8 @@ class SendTab(ttk.Frame):
         seconds = self._chunks * delay
         shown = format_time(seconds)
         extra = ""
-        if stream_len:
-            extra = f", {stream_len} base32 chars"
+        if self._stream_len:
+            extra = f", {self._stream_len} base32 chars"
         self.estimate_var.set(
             f"{self._chunks} chunks{extra}  |  about {shown} at {delay:.2f} s/chunk "
             f"(plus ACK waits)"
@@ -261,6 +292,22 @@ class SendTab(ttk.Frame):
         value = round(float(self.delay_var.get()), 2)
         self.delay_label_var.set(f"{value:.2f} s/chunk")
         self._update_estimate()
+
+    def _on_chunk_size_change(self, *_args) -> None:
+        value = self.chunk_size_var.get()
+        clamped = max(16, min(63, value))
+        if value != clamped:
+            self.chunk_size_var.set(clamped)
+            warning = f"Chunk size {value} is outside 16-63; using {clamped}."
+        elif clamped > 40:
+            warning = "Chunk size >40 will trigger the Detector length rule."
+        else:
+            warning = ""
+        if clamped > 40 and value != clamped:
+            warning += " Chunk size >40 will trigger the Detector length rule."
+        self.chunk_warning_var.set(warning)
+        self.chunk_size_label_var.set(f"{clamped} chars")
+        self._refresh_preview()
 
     def _toggle_password(self) -> None:
         self.password_entry.configure(show="" if self.show_pw_var.get() else "*")
@@ -298,6 +345,7 @@ class SendTab(ttk.Frame):
         delay = round(float(self.delay_var.get()), 2)
         password = self._password()
         compress = self.compress_var.get()
+        chunk_size = self.chunk_size_var.get()
 
         self._clear_log()
         self._slow = False
@@ -305,6 +353,10 @@ class SendTab(ttk.Frame):
         self._run_info = {}
         self._recorded = False
         self._total = 0
+        self._acked = 0
+        self.window_var.set(
+            f"Window: {protocol.WINDOW_SIZE} chunks, ACK after {protocol.WINDOW_SIZE}"
+        )
         self.progress.configure(value=0, maximum=100)
         self.progress_var.set("Chunks sent: 0/0")
         self.rate_var.set("")
@@ -313,24 +365,25 @@ class SendTab(ttk.Frame):
         self._cancel = threading.Event()
         self._log(
             f"Sending {self._file_path.name} to {server}:{port} "
-            f"(delay {delay:.2f}s, compression {'on' if compress else 'off'}, "
+            f"(delay {delay:.2f}s, chunk size {chunk_size}, compression {'on' if compress else 'off'}, "
             f"encryption {'on' if password else 'off'})"
         )
 
         self._worker = threading.Thread(
             target=self._run_send,
-            args=(self._file_path, server, port, delay, password, compress, self._cancel),
+            args=(self._file_path, server, port, delay, password, compress, chunk_size, self._cancel),
             name="dnstunnel-send",
             daemon=True,
         )
         self._worker.start()
 
     def _run_send(self, path: Path, server: str, port: int, delay: float,
-                  password: str | None, compress: bool, cancel: threading.Event) -> None:
+                  password: str | None, compress: bool, chunk_size: int,
+                  cancel: threading.Event) -> None:
         try:
             protocol.send_file(
                 path, server, port,
-                delay=delay, password=password, compress=compress,
+                delay=delay, password=password, compress=compress, chunk_size=chunk_size,
                 cancel=cancel, on_event=self._queue.put,
             )
         except Exception as exc:  # surfaced in the log, never silently swallowed
@@ -368,6 +421,9 @@ class SendTab(ttk.Frame):
                 "chunks": event["chunks"],
             }
             self.progress.configure(maximum=max(1, self._total), value=0)
+            self.window_var.set(
+                f"Window: {protocol.WINDOW_SIZE} chunks, ACK after {protocol.WINDOW_SIZE}"
+            )
             layers = "raw"
             if event["compressed"]:
                 layers = "zlib"
@@ -378,14 +434,26 @@ class SendTab(ttk.Frame):
                 f"({format_size(event['size'])}), {layers}"
             )
         elif kind == "chunk":
-            self.progress.configure(value=event["seq"])
-            self.progress_var.set(f"Chunks sent: {event['seq']}/{event['total']}")
-            rate, eta = self._rate(event["seq"], event["total"])
+            self._acked += 1
+            self.progress.configure(value=self._acked)
+            self.progress_var.set(f"Chunks sent: {self._acked}/{event['total']}")
+            rate, eta = self._rate(self._acked, event["total"])
             self.rate_var.set(f"{rate:.1f} chunks/s  |  ETA {eta}")
             self._log(f"Chunk {event['seq']:03d} sent, ACK received")
         elif kind == "retry":
             self._log(f"Chunk {event['seq']:03d} no ACK, retry {event['attempt']}/"
                       f"{protocol.MAX_RETRIES}")
+        elif kind == "window":
+            self.window_var.set(
+                f"Window: {protocol.WINDOW_SIZE} chunks, ACK after {protocol.WINDOW_SIZE}"
+                f"  |  {event['window']}/{event['windows']} completed"
+            )
+            before = (event["window"] - 1) * protocol.WINDOW_SIZE
+            window_total = min(protocol.WINDOW_SIZE, event["total"] - before)
+            self._log(
+                f"Window {event['window']}/{event['windows']} sent, "
+                f"{event['acked'] - before}/{window_total} ACKs"
+            )
         elif kind == "chunk_failed":
             self._log(f"Chunk {event['seq']:03d} failed after {event['attempts']} tries")
         elif kind == "end":

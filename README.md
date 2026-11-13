@@ -34,10 +34,10 @@ empty. Leave this window running.
 ### 2. Send a file
 
 **Send** tab → **Choose file** → Preset `Skein - Aviral` → Server
-`10.144.144.89`, Port `53`, Delay `0.05` → **Send**. The preview line shows
-the real chunk count before you commit: the 346-byte demo file
-`examples/Neo4j-c07dc072-Created-2026-04-27.txt` is `28 chunks`. The progress
-line then counts them, `28/28`, with live chunks/sec and ETA.
+`10.144.144.89`, Port `53` → **Send**. Select a Base32 chunk size from
+16–63 characters (32 by default) and a delay (0.01 seconds by default).
+The preview gives the actual chunk count and estimated time. The log shows
+the ACK count for each window of up to 10 chunks.
 
 ### 3. Check the result
 
@@ -101,11 +101,10 @@ your file ──> encoder ── DNS queries ──> decoder ──> recovered f
    header), then encrypt with Fernet when a password is set (also flagged).
 3. Build the stream: header JSON + `\n` + the processed bytes. `size` and
    `sha256` describe the **original** file, so verification is end to end.
-4. Base32-encode the stream and cut it into 32-character chunks, numbered
-   `001, 002, ...`. 32 Base32 characters carry exactly **20 bytes**.
-5. Send one DNS query per chunk (QTYPE A; the data is in the question, the
-   answer does not matter), waiting for a reply with the same query ID as an
-   ACK, resending on timeout (max 3 tries, 2.0 s each).
+4. Base32-encode the stream and cut it into chunks of 16–63 characters
+   (32 by default), numbered `001, 002, ...`. Each query carries one chunk.
+5. Send up to 10 queries before collecting their individual matching-QID
+   ACKs. Retry only missing chunks on timeout (max 3 attempts, 2.0 s each).
 6. Send one `END` query. The decoder sorts chunks **numerically**, decodes
    them, reverses encrypt/decompress, and checks size and SHA256 against the
    header.
@@ -116,6 +115,7 @@ Hand-built DNS packets only: `socket` + `struct`, no DNS library anywhere.
 
 The header carries the filename, a 64-character hex SHA256, flags and the
 chunk count, so a small file costs more queries than its size suggests.
+These counts use the default 32-character chunk size.
 
 | File | Chunks |
 |---|---|
@@ -171,7 +171,7 @@ The GUI is a client of the same library; the CLIs are thin wrappers over it.
 python decoder.py --host 127.0.0.1 --port 15353
 
 # Terminal 2
-python encoder.py examples/secret.txt --server 127.0.0.1 --port 15353 --delay 0.05
+python encoder.py examples/secret.txt --server 127.0.0.1 --port 15353 --delay 0.01 --chunk-size 32
 ```
 
 Both accept `--password` (encrypt/decrypt), `--domain`, and `--no-compress`.
@@ -183,26 +183,23 @@ The decoder writes `recovered_<filename>`; the GUI writes into `received/`.
 python -m pytest tests/ -v
 ```
 
-| File | Tests | Covers |
-|---|---|---|
-| `tests/test_protocol.py` | 10 | Base32, chunk math, header, DNS packets, numeric sort, dedup names |
-| `tests/test_crypto.py` | 7 | Fernet round trip, wrong password, tamper, XOR fallback |
-| `tests/test_loopback.py` | 5 | real UDP round trip, encrypted 11 KB, 30 KB > 999 chunks, bad password, no overwrite |
-| `tests/test_detector.py` | 11 | entropy, length, rate, unique-name rule, 2-rule warning, cooldown, shared-socket tap |
-| `tests/test_report.py` | 4 | every required field, missing id, txt fallback, real PDF header |
+The suite covers protocol and chunking, selective ACK retries, UDP loopback,
+encryption, detection and reports.
 
 Last run on this machine, verbatim:
 
 ```
 $ python -m pytest tests/ -q
-.....................................                                    [100%]
-37 passed in 3.71s
+...................................................                      [100%]
+51 passed in 4.67s
 ```
 
 ## Tabs
 
-- **Send** — file, real chunk/time estimate, transport preset, delay slider,
-  optional password, live log, progress with chunks/sec and ETA, Cancel.
+- **Send** — file, real chunk/time estimate, 16–63-character chunk-size
+  slider, 10-chunk ACK windows, delay slider, optional password, live log,
+  progress with chunks/sec and ETA, Cancel. Labels over 40 characters
+  trigger the detector's length rule.
 - **Receive** — host/port, start/stop, live chunk table with the actual
   queries, size/SHA256 verdicts, open file/folder, compare with original.
 - **History** — every send and receive recorded in `history.db` (SQLite):
@@ -225,10 +222,9 @@ $ python -m pytest tests/ -q
 - **Encryption only when a password is set.** Left blank, chunks are Base32
   and anyone on the path can read them. With a password: Fernet + PBKDF2
   (200 000 iterations, random salt per message).
-- Throughput is ~20 bytes per query by design. 1 KB is 61 queries; that
-  slowness is the demo's point, not a bug.
-- UDP only, one query at a time per chunk, no resume: a decoder restart loses
-  the in-memory session.
+- At the default chunk size each query carries approximately 20 stream bytes;
+  changing the size trades fewer queries for longer, more detectable labels.
+- UDP only, no resume: a decoder restart loses the in-memory session.
 - DNS-over-HTTPS would bypass this channel entirely.
 - Easy to flag with length, entropy and rate heuristics at high speed — which
   is exactly what the Detector tab demonstrates.
