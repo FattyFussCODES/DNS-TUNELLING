@@ -16,6 +16,26 @@ BRAND_TAGLINE = "Smuggle a file out using only DNS queries"
 # The logo art sits on this near-black background.
 LOGO_BG = "#0d0d0d"
 
+# Shared colours for native Tk widgets, which do not inherit ttk styles.
+SURFACE_BG = "#171717"
+RAISED_BG = "#2c2c2c"
+TEXT_FG = "#f3f3f1"
+MUTED_FG = "#aaa9a7"
+SUCCESS_FG = "#75d49a"
+ERROR_FG = "#ff8580"
+
+TEXT_OPTIONS = {
+    "background": SURFACE_BG,
+    "foreground": TEXT_FG,
+    "insertbackground": TEXT_FG,
+    "selectbackground": "#484848",
+    "selectforeground": TEXT_FG,
+    "highlightbackground": RAISED_BG,
+    "highlightcolor": MUTED_FG,
+    "highlightthickness": 1,
+    "relief": "flat",
+}
+
 
 class APPLogo:
     """Locations of the packaged brand assets (they ship as package data)."""

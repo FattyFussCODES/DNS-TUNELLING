@@ -1,9 +1,3 @@
-# Runtime dependency: AES-128 + HMAC encryption for the tunnel stream.
-# Without it the app falls back to a SHA256-XOR + HMAC layer and says so.
-cryptography>=42
-
-# Optional: real PDF reports. Without it reports are written as .txt.
-# reportlab>=4
-
-# Tests
-pytest>=8
+# Editable source install with test dependencies. Runtime dependencies are
+# declared in pyproject.toml; install .[workbench] for the optional workbench.
+-e .[dev]

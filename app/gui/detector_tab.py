@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .. import config as app_config, detector, protocol
+from . import ERROR_FG, MUTED_FG, RAISED_BG, SUCCESS_FG, SURFACE_BG
 
 ALERT_ROWS_LIMIT = 500
 GRAPH_SECONDS = 60
@@ -88,8 +89,8 @@ class DetectorTab(ttk.Frame):
         graph_frame = ttk.LabelFrame(self, text="Queries per second", padding=6)
         graph_frame.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         graph_frame.columnconfigure(0, weight=1)
-        self.canvas = tk.Canvas(graph_frame, height=140, bg="white",
-                                highlightthickness=1, highlightbackground="#cccccc")
+        self.canvas = tk.Canvas(graph_frame, height=140, bg=SURFACE_BG,
+                                highlightthickness=1, highlightbackground=RAISED_BG)
         self.canvas.grid(row=0, column=0, sticky="ew")
 
         self.banner_var = tk.StringVar(value="")
@@ -118,7 +119,7 @@ class DetectorTab(ttk.Frame):
         scroll = ttk.Scrollbar(alerts_frame, orient="vertical", command=self.tree.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.tag_configure("warn", foreground="#c5221f")
+        self.tree.tag_configure("warn", foreground=ERROR_FG)
 
     # -- attach / detach ---------------------------------------------------
 
@@ -363,9 +364,9 @@ class DetectorTab(ttk.Frame):
 
         for fraction in (0.5, 1.0):
             y = bottom - plot_height * fraction
-            canvas.create_line(left, y, width - 12, y, fill="#e2e2e2")
+            canvas.create_line(left, y, width - 12, y, fill=RAISED_BG)
             canvas.create_text(left - 6, y, text=str(int(peak * fraction)),
-                               anchor="e", fill="#666666",
+                               anchor="e", fill=MUTED_FG,
                                font=("Segoe UI", 8))
 
         points: list[float] = []
@@ -374,13 +375,13 @@ class DetectorTab(ttk.Frame):
             y = bottom - plot_height * (count / peak)
             points.extend((x, y))
         if len(points) >= 4:
-            canvas.create_line(*points, fill="#1a7f37", width=2)
+            canvas.create_line(*points, fill=SUCCESS_FG, width=2)
 
-        canvas.create_line(left, bottom, width - 12, bottom, fill="#999999")
+        canvas.create_line(left, bottom, width - 12, bottom, fill=MUTED_FG)
         canvas.create_text(left, height - 6, text=f"{GRAPH_SECONDS} s ago",
-                           anchor="w", fill="#666666", font=("Segoe UI", 8))
+                           anchor="w", fill=MUTED_FG, font=("Segoe UI", 8))
         canvas.create_text(width - 12, height - 6, text="now", anchor="e",
-                           fill="#666666", font=("Segoe UI", 8))
+                           fill=MUTED_FG, font=("Segoe UI", 8))
         if self.detector.queries:
             self._update_stats(sorted(self.detector._rule_fires))
         self.after(500, self._redraw)

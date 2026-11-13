@@ -15,7 +15,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .. import config as app_config, protocol
 from ..utils import format_size, format_time, stamp
-from . import mono_family, text_tail
+from . import RAISED_BG, SURFACE_BG, TEXT_FG, TEXT_OPTIONS, mono_family, text_tail
 
 LOG_LIMIT = 4000
 
@@ -155,6 +155,8 @@ class SendTab(ttk.Frame):
         self.chunk_scale = tk.Scale(
             chunk_row, from_=16, to=63, resolution=1, orient="horizontal",
             variable=self.chunk_size_var, showvalue=False, highlightthickness=0,
+            bg=SURFACE_BG, fg=TEXT_FG, troughcolor=RAISED_BG,
+            activebackground="#484848", highlightbackground=SURFACE_BG,
         )
         self.chunk_scale.grid(row=0, column=0, sticky="ew")
         self.chunk_size_label_var = tk.StringVar(value=f"{protocol.CHUNK_SIZE} chars")
@@ -211,7 +213,7 @@ class SendTab(ttk.Frame):
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         self.log = tk.Text(frame, height=12, wrap="none", state="disabled",
-                           font=(mono_family(), 9))
+                           font=(mono_family(), 9), **TEXT_OPTIONS)
         self.log.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.log.yview)
         scroll.grid(row=0, column=1, sticky="ns")

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>DNSMuggle — Defensive workbench</title>
+  <link rel="icon" href="./icons/activity.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div id="app"><div class="boot" role="status">Connecting to the local workbench…</div></div>
+  <dialog id="palette" aria-labelledby="palette-title">
+    <div class="palette-head"><div><span class="eyebrow">QUICK NAVIGATION</span><h2 id="palette-title">Command palette</h2></div><button class="icon-button" data-close-palette aria-label="Close command palette">×</button></div>
+    <label class="sr-only" for="command-search">Search commands</label><input id="command-search" type="search" placeholder="Search pages and actions" autocomplete="off">
+    <div id="commands" class="commands"></div>
+    <div class="palette-foot">Navigate with Tab · Close with Esc</div>
+  </dialog>
+  <dialog id="preview" aria-labelledby="preview-title">
+    <div class="palette-head"><div><span class="eyebrow">SAVED REPORT</span><h2 id="preview-title">Report preview</h2></div><button type="button" class="icon-button" id="close-preview" aria-label="Close report preview">×</button></div>
+    <div id="preview-content" class="preview-content" role="status"></div>
+  </dialog>
+</body>
+</html>

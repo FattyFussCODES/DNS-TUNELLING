@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dnsmuggle"
-version = "1.0.1"
-description = "DNSmuggle: smuggle a file out using only DNS queries. Lab app with send, receive, verify, detect and report"
+dynamic = ["version"]
+description = "DNSMuggle: a DNS transfer and detection lab for authorized environments"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Aviral Bohra" }]
-keywords = ["dns", "tunnelling", "lab", "security", "tkinter"]
+keywords = ["dns", "tunnelling", "lab", "security", "desktop"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -19,22 +19,50 @@ classifiers = [
 ]
 dependencies = [
     "cryptography>=42",
+    "platformdirs>=4",
 ]
 
 [project.optional-dependencies]
+workbench = ["pywebview>=6.1,<7"]
 pdf = ["reportlab>=4"]
 dev = ["pytest>=8"]
 
+[project.urls]
+Homepage = "https://github.com/FattyFussCODES/DNSmuggle"
+Repository = "https://github.com/FattyFussCODES/DNSmuggle"
+
 [project.scripts]
 dnsmuggle = "app.main:main"
+DNSMuggle = "app.main:main"
+# Explicit command for the same transfer and receiver window.
+dnsmuggle-lab = "app.lab_main:main"
+# Optional defensive telemetry workbench.
+dnsmuggle-workbench = "app.workbench.desktop:main"
 # Alias from before the rename; harmless and keeps old shortcuts working.
 dnstunnel-app = "app.main:main"
 
 [tool.setuptools]
-packages = ["app", "app.gui"]
+packages = ["app", "app.gui", "app.workbench"]
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = {attr = "app.__version__"}
 
 [tool.setuptools.package-data]
-app = ["assets/*.png", "assets/*.ico"]
+app = [
+    "assets/*.png",
+    "assets/*.ico",
+    "workbench/web/**/*.html",
+    "workbench/web/**/*.css",
+    "workbench/web/**/*.js",
+    "workbench/web/**/*.svg",
+    "workbench/web/**/*.png",
+    "workbench/web/**/*.ico",
+    "workbench/web/**/*.woff2",
+    "workbench/web/**/LUCIDE-LICENSE.txt",
+    "workbench/web/**/GEIST-LICENSE.txt",
+    "workbench/web/**/JETBRAINS-MONO-LICENSE.txt",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

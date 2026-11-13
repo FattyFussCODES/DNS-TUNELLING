@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="docs/screenshots/dnsmuggle-logo.png" alt="DNSmuggle" width="300">
+  <img src="https://raw.githubusercontent.com/FattyFussCODES/DNSmuggle/main/docs/screenshots/dnsmuggle-logo.png" alt="DNSmuggle" width="300">
 </p>
 
 # DNSmuggle
 
-Smuggle a file out using only DNS queries — then watch it happen, verify it,
-catch it with a detector, and print a report. A lab demo of DNS tunnelling:
-the encoder turns a file into DNS questions, a decoder on your own server
-rebuilds it from those questions.
+DNSMuggle 1.1.0 is a DNS transfer and detection lab for authorized
+environments. The main desktop application combines Send, Receive, History,
+Detector, and Settings in one window. A separate defensive workbench provides
+additional DNS telemetry analysis.
 
 > **Lab only. Test only with your own files, from your own machines, to
 > a server you own.** Never point this at someone else's machine, a real
@@ -16,14 +16,36 @@ rebuilds it from those questions.
 > host: you create the test file and start the encoder yourself. There
 > is no infiltration step in this project.
 
-## One window, the whole demo
+## Optional defensive workbench
 
-A Tkinter desktop app with five tabs: **Send**, **Receive**, **History**,
-**Detector**, **Settings**. No command line needed for the demo.
+Install the `workbench` extra (see below), then launch `dnsmuggle-workbench`
+or `python -m app.workbench.desktop` to open the separate telemetry workbench.
+Configure a numeric listen address and port, start monitoring, and inspect
+observations, detector alerts, and summaries. The workbench stores observation
+metadata and can generate text reports; PDF reports require the `pdf` extra.
 
-## How to use, with screenshots
+The screenshots show the actual workbench with synthetic loopback queries:
 
-![Send tab](docs/screenshots/01-send-tab.png)
+![Workbench overview with synthetic observations](https://raw.githubusercontent.com/FattyFussCODES/DNSmuggle/main/docs/screenshots/workbench-overview.png)
+
+![Traffic analysis with synthetic observations](https://raw.githubusercontent.com/FattyFussCODES/DNSmuggle/main/docs/screenshots/workbench-traffic.png)
+
+The listener sees only DNS queries intentionally delivered to its configured
+UDP endpoint. It does not capture network traffic, reply to or forward DNS
+queries, or reconstruct files. Length, entropy, and rate rules are heuristics,
+not proof of tunnelling. A per-rule, per-source cooldown can suppress alert
+evidence, so the flag rate is not detection accuracy.
+
+## Main application
+
+Launch `dnsmuggle` or `python -m app.main` for the transfer and detection
+window. Its pages are **Send**, **Receive**, **History**, **Detector**, and
+**Settings**. `dnsmuggle-lab` and `python -m app.lab_main` open the same window.
+The screenshots below show the redesigned main application.
+
+### How to use the transfer lab
+
+![Send page](https://raw.githubusercontent.com/FattyFussCODES/DNSmuggle/main/docs/screenshots/lab-send.png)
 
 ### 1. Start the receiver first
 
@@ -43,48 +65,82 @@ estimated time; the log shows ACK counts for each window.
 ### 3. Check the result
 
 The Receive tab fills in Filename, Size, SHA256 and both verdicts:
-`Size match PASS` and `SHA256 match PASS`. The file lands in `received/`,
-never overwriting: a second copy of the same name becomes `name (1).ext`.
+`Size match PASS` and `SHA256 match PASS`. The file lands in the configured
+receive folder, never overwriting: a second copy becomes `name (1).ext`.
 Use **Compare with original...** to diff SHA256 against the source file.
 
-![Receive tab](docs/screenshots/02-receive-tab.png)
-
-> The screenshots show the earlier interface. The receive screenshot uses a
-> temporary loopback port and folder rather than the defaults above.
+![Receive page](https://raw.githubusercontent.com/FattyFussCODES/DNSmuggle/main/docs/screenshots/lab-receive.png)
 
 ## Install and run
 
-Python **3.11+**. Windows first, Linux second.
+Python **3.11+** and Tkinter are required for the main application (on
+Debian/Ubuntu, install `python3-tk`). The optional workbench uses `pywebview`
+and needs Microsoft Edge WebView2 on Windows or WebKitGTK on Linux
+(`python3-gi` and `gir1.2-webkit2-4.1` on Debian/Ubuntu). `cryptography`
+supports transfer encryption; `reportlab` is optional for PDF reports.
 
-| Requirement | Why |
-|---|---|
-| `cryptography` | Fernet (AES-128-CBC + HMAC-SHA256) and PBKDF2 for password encryption |
-| Tkinter | the GUI; ships with the python.org Windows/macOS installers |
-| `reportlab` *(optional)* | PDF reports; without it reports are written as `.txt` |
-| `pytest` *(dev)* | the test suite |
+From a source checkout, install the main application in editable mode and run
+it from the repository root:
 
 ```bash
-# install the one runtime dependency
-python -m pip install -r requirements.txt
-
-# Windows
-python -m app.main
-
-# Linux (install Tkinter first: sudo apt install python3-tk)
-python3 -m app.main
+python -m pip install -e .
+dnsmuggle
 ```
 
-Optional, installs the `dnsmuggle` command (plus `dnstunnel-app` as an alias
-from before the rename):
+To add the optional workbench and PDF report support:
+
+```bash
+python -m pip install -e ".[workbench,pdf]"
+dnsmuggle-workbench
+```
+
+For development and tests, run `python -m pip install -e ".[dev]"` or
+`python -m pip install -r requirements.txt` from the repository root; both
+install the project in editable mode with test dependencies. Extras can be
+combined, for example `python -m pip install -e ".[dev,workbench,pdf]"`.
+
+The frontend source is the distributable `app/workbench/web/` directory.
+It uses browser modules directly: no Node installation or frontend build step
+is needed. Keep its HTML, scripts, styles, icons, fonts and license files
+together when packaging. Build Python distributions only after those files are
+present; neither local credentials nor application data belong in an artifact.
+
+For a non-editable installation from the current source tree:
 
 ```bash
 python -m pip install .
 dnsmuggle
 ```
 
-Port **53 needs Admin/sudo**. Port **5353** does not — but on Windows both
-can already be taken (Internet Connection Sharing holds 53, mDNS/Bonjour
-holds 5353); the status line says which, pick a free port instead.
+To install the latest published release instead, run:
+
+```bash
+python -m pip install dnsmuggle
+```
+
+Add the optional workbench with `python -m pip install "dnsmuggle[workbench]"`.
+The PyPI release may differ from this source checkout.
+
+The workbench defaults to `127.0.0.1:15353`. A port already in use produces
+a bind error; stop the other listener or select a free port. Binding port 53
+may require administrator privileges. The lab's receiver and the workbench
+cannot bind the same address and port at the same time.
+
+## Data and privacy
+
+The workbench stores `workbench.db` and generated reports in the `workbench`
+subdirectory of `platformdirs.user_data_path("DNSMuggle", appauthor=False)`.
+The main application uses that platform-specific DNSMuggle data directory for its
+own configuration and default files. The exact location depends on the OS and
+environment. Query names and source addresses are stored as observation
+metadata and may be sensitive; protect the data directory and review reports
+before sharing. Keep credentials, local configuration, received files, and
+databases out of source and distribution artifacts.
+On first launch, legacy lab data in the source-tree application directory and
+workbench data in `~/DNSMuggle/workbench` are copied to the corresponding
+per-user locations when applicable. Existing destination data is not replaced;
+the original data remains in place. A conflicting workbench report stops
+migration so the conflict can be resolved without losing either copy.
 
 ## How it works
 
@@ -130,17 +186,15 @@ The GUI previews this before you send, from the real stream, never a guess.
 ```
 DNSMuggle/
 ├── app/
-│   ├── main.py                 # entry: python -m app.main / dnsmuggle
+│   ├── main.py                 # main transfer and detection entry point
+│   ├── lab_main.py             # Tkinter transfer and detection window
+│   ├── workbench/              # monitor, storage, reports, local bridge and web UI
 │   ├── protocol.py             # packets, chunking, ACK/retry/END, Receiver
 │   ├── crypto.py               # Fernet + PBKDF2, XOR+HMAC fallback
-│   ├── compress.py             # zlib layer above 1 KB
-│   ├── detector.py             # length, entropy, rate rules (tap on Receiver)
-│   ├── history.py              # SQLite history.db, transfers table
-│   ├── report.py               # text/PDF reports into reports/
-│   ├── config.py               # presets, defaults, config.json load/save
-│   ├── utils.py                # sha256, size/time formatting, dedup paths
-│   ├── assets/                 # dnsmuggle-logo.png, dnsmuggle-icon.png/.ico
-│   └── gui/                    # main window + five tabs
+│   ├── detector.py             # length, entropy and rate rules
+│   ├── config.py               # transfer lab configuration
+│   ├── assets/                 # application graphics
+│   └── gui/                    # original five-tab lab window
 ├── encoder.py                  # CLI wrapper over app.protocol
 ├── decoder.py                  # CLI wrapper over app.protocol
 ├── dns_topo.py                 # Mininet topology: h1, h2, s1
@@ -160,9 +214,10 @@ DNSMuggle/
 └── README.md
 ```
 
-## Command line (still works)
+## Command line (source checkout)
 
-The GUI is a client of the same library; the CLIs are thin wrappers over it.
+The legacy transfer lab uses the same library as these source-tree wrappers.
+`encoder.py` and `decoder.py` are not installed as separate wheel commands.
 
 ```bash
 # Terminal 1
@@ -172,8 +227,9 @@ python decoder.py --host 127.0.0.1 --port 15353
 python encoder.py examples/secret.txt --server 127.0.0.1 --port 15353 --delay 0.01 --chunk-size 32
 ```
 
-Both accept `--password` (encrypt/decrypt), `--domain`, and `--no-compress`.
-The decoder writes `recovered_<filename>`; the GUI writes into `received/`.
+Both accept `--password` and `--domain`; only the encoder accepts
+`--no-compress`. The decoder writes `recovered_<filename>`; the lab GUI uses
+its configured receive folder.
 
 ## Tests
 
@@ -185,7 +241,7 @@ The suite covers protocol and chunking, selective ACK retries, UDP loopback,
 encryption, detection and reports.
 
 
-## Tabs
+## Main application pages
 
 - **Send** — file, real chunk/time estimate, 16–63-character chunk-size
   slider, 10-chunk ACK windows, delay slider, optional password, live log,
@@ -194,7 +250,7 @@ encryption, detection and reports.
 - **Receive** — host/port, start/stop, live chunk table with the actual
   queries, size/SHA256 verdicts, open file/folder, compare with original.
   The log also retains the newest 4,000 lines.
-- **History** — every send and receive recorded in `history.db` (SQLite):
+- **History** — every send and receive recorded in the lab's SQLite history:
   date, filename, size, session, server, mode, chunks, result, time taken.
   Refresh, clear, export CSV, generate a report.
 - **Detector** — a passive tap on the **Receive tab's** listener: one socket,
@@ -206,8 +262,8 @@ encryption, detection and reports.
   listening. Two self-tests: real encoder chunks get flagged, ordinary DNS
   names pass.
 - **Settings** — defaults, transport mode, receiver folder, history path,
-  and About (with logo). Domain mode stays disabled behind a warning until
-  the public relay test is verified.
+  and About (with logo). Domain mode requires a user confirmation; the app
+  does not independently verify the public relay test.
 
 ## Known limits
 
@@ -217,13 +273,16 @@ encryption, detection and reports.
 - At the default chunk size each query carries approximately 20 stream bytes;
   changing the size trades fewer queries for longer, more detectable labels.
 - UDP only, no resume: a decoder restart loses the in-memory session.
+- Receiver sessions and input sizes are not bounded; the receiver can consume
+  substantial memory. It writes reconstructed files even if the reported
+  size or SHA-256 comparison fails. The sender's success result does not
+  establish successful reconstruction.
 - DNS-over-HTTPS would bypass this channel entirely.
 - Easy to flag with length, entropy and rate heuristics at high speed — which
   is exactly what the Detector tab demonstrates.
-- The detector sees exactly what reaches the receiver's socket: tunnel
-  queries plus any ordinary DNS sent to that host and port. It is not a
-  promiscuous sniffer and cannot see traffic addressed elsewhere on the
-  network.
+- The workbench observes only DNS queries delivered to its own UDP endpoint.
+  It does not share the lab receiver's socket or observe network-wide traffic;
+  its listener does not send the ACKs required by the transfer tools.
 
 ## Safety
 

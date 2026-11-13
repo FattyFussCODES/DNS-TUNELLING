@@ -12,3 +12,13 @@ reports/
 build/
 dist/
 *.egg-info/
+
+# Local credentials and secrets must never be committed.
+.pypirc
+*.pypirc
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+node_modules/

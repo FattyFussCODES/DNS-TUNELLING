@@ -8,7 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from .. import report
 from ..history import History
 from ..utils import format_size, format_time
-from . import mono_family, open_path
+from . import ERROR_FG, SUCCESS_FG, TEXT_OPTIONS, mono_family, open_path
 
 COLUMNS = (
     ("date", "Date", 140, "w"),
@@ -74,8 +74,8 @@ class HistoryTab(ttk.Frame):
         scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.tag_configure("pass", foreground="#1a7f37")
-        self.tree.tag_configure("fail", foreground="#c5221f")
+        self.tree.tag_configure("pass", foreground=SUCCESS_FG)
+        self.tree.tag_configure("fail", foreground=ERROR_FG)
         self.tree.bind("<<TreeviewSelect>>", self._show_details)
 
         self._build_details()
@@ -115,7 +115,7 @@ class HistoryTab(ttk.Frame):
         ttk.Label(frame, text="Log snippet").grid(row=1, column=0, sticky="nw",
                                                   pady=(8, 0))
         self.log_view = tk.Text(frame, height=6, wrap="none", state="disabled",
-                                font=(mono_family(), 9))
+                                font=(mono_family(), 9), **TEXT_OPTIONS)
         self.log_view.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(4, 0))
         frame.rowconfigure(2, weight=1)
 

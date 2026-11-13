@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .. import config as app_config, protocol, report
 from ..utils import format_size, format_time, sha256_file, stamp
-from . import mono_family, open_path, text_tail
+from . import TEXT_OPTIONS, mono_family, open_path, text_tail
 
 LOG_LIMIT = 4000
 ROWS_LIMIT = 2000
@@ -50,7 +50,7 @@ class ReceiveTab(ttk.Frame):
         frame.columnconfigure(9, weight=1)
 
         ttk.Label(frame, text="Host").grid(row=0, column=0, sticky="w")
-        self.host_var = tk.StringVar(value="0.0.0.0")
+        self.host_var = tk.StringVar(value="127.0.0.1")
         ttk.Entry(frame, textvariable=self.host_var, width=18).grid(
             row=0, column=1, sticky="w", padx=(6, 16)
         )
@@ -156,7 +156,7 @@ class ReceiveTab(ttk.Frame):
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         self.log = tk.Text(frame, height=9, wrap="none", state="disabled",
-                           font=(mono_family(), 9))
+                           font=(mono_family(), 9), **TEXT_OPTIONS)
         self.log.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.log.yview)
         scroll.grid(row=0, column=1, sticky="ns")
@@ -171,7 +171,7 @@ class ReceiveTab(ttk.Frame):
     def _start(self) -> None:
         if self.receiver is not None and self.receiver.running:
             return
-        host = self.host_var.get().strip() or "0.0.0.0"
+        host = self.host_var.get().strip() or "127.0.0.1"
         try:
             port = int(self.port_var.get())
             if not 1 <= port <= 65535:
