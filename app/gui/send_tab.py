@@ -13,16 +13,19 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .. import config, protocol
+from .. import config as app_config, protocol
 from ..utils import format_size, format_time, stamp
-from . import mono_family
+from . import mono_family, text_tail
 
 LOG_LIMIT = 4000
 
 
 class SendTab(ttk.Frame):
-    def __init__(self, master) -> None:
+    def __init__(self, master, *, history=None, config=None) -> None:
         super().__init__(master, padding=12)
+        self.history = history
+        self.cfg = dict(config) if config is not None else dict(app_config.DEFAULTS)
+        self._mode = self.cfg.get("mode", app_config.DEFAULTS["mode"])
         self._file_path: Path | None = None
         self._file_bytes: bytes | None = None
         self._chunks = 0
@@ -34,6 +37,8 @@ class SendTab(ttk.Frame):
         self._started = 0.0
         self._total = 0
         self._log_lines = 0
+        self._run_info: dict = {}
+        self._recorded = False
         self._build()
         self.after(80, self._poll)
 
@@ -83,22 +88,22 @@ class SendTab(ttk.Frame):
         frame.columnconfigure(6, weight=1)
 
         ttk.Label(frame, text="Preset").grid(row=0, column=0, sticky="w")
-        self.preset_var = tk.StringVar(value=config.PRESETS[0]["label"])
+        self.preset_var = tk.StringVar(value=app_config.PRESETS[0]["label"])
         self.preset_box = ttk.Combobox(
             frame, textvariable=self.preset_var, state="readonly", width=24,
-            values=[preset["label"] for preset in config.PRESETS],
+            values=[preset["label"] for preset in app_config.PRESETS],
         )
         self.preset_box.grid(row=0, column=1, sticky="w", padx=(6, 16))
         self.preset_box.bind("<<ComboboxSelected>>", self._on_preset)
 
         ttk.Label(frame, text="Server").grid(row=0, column=2, sticky="w")
-        self.server_var = tk.StringVar(value=config.DEFAULT_SERVER)
+        self.server_var = tk.StringVar(value=self.cfg["server"])
         ttk.Entry(frame, textvariable=self.server_var, width=22).grid(
             row=0, column=3, sticky="w", padx=(6, 16)
         )
 
         ttk.Label(frame, text="Port").grid(row=0, column=4, sticky="w")
-        self.port_var = tk.StringVar(value=str(config.DEFAULT_PORT))
+        self.port_var = tk.StringVar(value=str(self.cfg["port"]))
         ttk.Entry(frame, textvariable=self.port_var, width=8).grid(
             row=0, column=5, sticky="w", padx=(6, 0)
         )
@@ -110,7 +115,7 @@ class SendTab(ttk.Frame):
         ).grid(row=1, column=2, columnspan=4, sticky="w", pady=(4, 0))
 
         ttk.Label(frame, text="Delay").grid(row=2, column=0, sticky="w", pady=(10, 0))
-        self.delay_var = tk.DoubleVar(value=config.DEFAULT_DELAY)
+        self.delay_var = tk.DoubleVar(value=self.cfg["delay"])
         delay_row = ttk.Frame(frame)
         delay_row.grid(row=2, column=1, columnspan=5, sticky="ew", pady=(10, 0))
         delay_row.columnconfigure(0, weight=1)
@@ -119,7 +124,7 @@ class SendTab(ttk.Frame):
             orient="horizontal", command=lambda _v: self._on_delay_change(),
         )
         self.delay_scale.grid(row=0, column=0, sticky="ew")
-        self.delay_label_var = tk.StringVar(value=f"{config.DEFAULT_DELAY:.2f} s/chunk")
+        self.delay_label_var = tk.StringVar(value=f"{self.cfg['delay']:.2f} s/chunk")
         ttk.Label(delay_row, textvariable=self.delay_label_var, style="Hint.TLabel",
                   width=14).grid(row=0, column=1, sticky="e", padx=(12, 0))
 
@@ -262,10 +267,12 @@ class SendTab(ttk.Frame):
 
     def _on_preset(self, _event=None) -> None:
         label = self.preset_var.get()
-        for preset in config.PRESETS:
-            if preset["label"] == label and preset["server"]:
-                self.server_var.set(preset["server"])
-                self.port_var.set(str(preset["port"]))
+        for preset in app_config.PRESETS:
+            if preset["label"] == label:
+                self._mode = preset["mode"]
+                if preset["server"]:
+                    self.server_var.set(preset["server"])
+                    self.port_var.set(str(preset["port"]))
                 return
 
     # -- sending -----------------------------------------------------------
@@ -295,6 +302,8 @@ class SendTab(ttk.Frame):
         self._clear_log()
         self._slow = False
         self._started = time.monotonic()
+        self._run_info = {}
+        self._recorded = False
         self._total = 0
         self.progress.configure(value=0, maximum=100)
         self.progress_var.set("Chunks sent: 0/0")
@@ -351,6 +360,13 @@ class SendTab(ttk.Frame):
         kind = event["type"]
         if kind == "start":
             self._total = event["chunks"]
+            self._run_info = {
+                "filename": event["filename"],
+                "size": event["size"],
+                "sha256": event["sha256"],
+                "session": event["session"],
+                "chunks": event["chunks"],
+            }
             self.progress.configure(maximum=max(1, self._total), value=0)
             layers = "raw"
             if event["compressed"]:
@@ -383,16 +399,59 @@ class SendTab(ttk.Frame):
                               f"done in {format_time(elapsed)}")
             self._log(f"Done: {event['sent']}/{event['total']} chunks sent, END sent "
                       f"in {format_time(elapsed)}")
+            self._record("PASS", elapsed)
             self._set_running(False)
         elif kind == "cancelled":
             self._log(f"Cancelled: {event['sent']}/{event['total']} chunks sent")
+            self._record("FAIL", time.monotonic() - self._started)
             self._set_running(False)
         elif kind == "error":
             self._log(f"Error: {event['message']}")
+            self._record("FAIL", time.monotonic() - self._started)
             self._set_running(False)
         elif kind == "worker_finished":
             if self.send_button.instate(["disabled"]):
                 self._set_running(False)
+
+    def _record(self, result: str, elapsed: float | None) -> None:
+        """One history row per run, PASS only when every chunk was ACKed."""
+        if self.history is None or self._recorded or not self._run_info:
+            return
+        self._recorded = True
+        info = self._run_info
+        try:
+            port = int(self.port_var.get())
+        except ValueError:
+            port = None
+        self.history.save_transfer(
+            direction="send",
+            filename=info.get("filename", "?"),
+            size=info.get("size", 0),
+            sha256=info.get("sha256"),
+            session=info.get("session"),
+            server=self.server_var.get().strip(),
+            port=port,
+            mode=self._mode_for(self.server_var.get().strip()),
+            chunks=info.get("chunks"),
+            result=result,
+            time_seconds=elapsed,
+            log=text_tail(self.log),
+        )
+
+    def _mode_for(self, server: str) -> str:
+        for preset in app_config.PRESETS:
+            if preset["server"] and preset["server"] == server:
+                return preset["mode"]
+        return "Custom"
+
+    def apply_config(self, config: dict) -> None:
+        """Called by the Settings tab after a save."""
+        self.cfg = dict(config)
+        self.server_var.set(self.cfg["server"])
+        self.port_var.set(str(self.cfg["port"]))
+        self.delay_var.set(self.cfg["delay"])
+        self._on_delay_change()
+        self._mode = self.cfg.get("mode", self._mode)
 
     def _rate(self, done: int, total: int) -> tuple[float, str]:
         elapsed = max(time.monotonic() - self._started, 1e-6)

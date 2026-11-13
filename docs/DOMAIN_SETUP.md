@@ -11,8 +11,8 @@ A Mininet VM behind NAT cannot do this. A small VPS is the usual
 option, because many home ISPs block inbound port 53.
 
 > Tested 2026-11-11: port forwarding to a home laptop is ruled out
-> on this JioFiber connection — the router WAN IP is `10.12.3.110`
-> (CGNAT) while the public IP is `49.36.139.72`, so the internet
+> on this JioFiber connection — the router WAN IP is `<ROUTER_WAN_IP>`
+> (CGNAT) while the public IP is `<PUBLIC_IP>`, so the internet
 > cannot reach the router directly. A VPS with its own real public
 > IP is the only internet route here. The same-Wi-Fi two-laptop
 > test needs no VPS and no domain — see `TWO_LAPTOP_SETUP.md`.

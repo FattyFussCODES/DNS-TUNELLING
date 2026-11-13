@@ -1,8 +1,8 @@
 # Test port forwarding first, before touching nameservers
 
 > **VERDICT for this connection — tested 2026-11-11, do not re-try:**
-> Your JioFiber router's WAN IP is `10.12.3.110` (a private `10.`
-> address) while "what is my ip" shows `49.36.139.72`. They do not
+> Your JioFiber router's WAN IP is `<ROUTER_WAN_IP>` (a private `10.`
+> address) while "what is my ip" shows `<PUBLIC_IP>`. They do not
 > match, so you are behind **CGNAT**. Port forwarding from the
 > internet to your laptop **cannot work on this connection**,
 > whatever you set on the router. The internet route for this
@@ -46,8 +46,8 @@ packet so the decoder knows the packet is for it.
 If your ISP uses CGNAT, port forwarding cannot work, no matter
 what you set on the router. Check before you change anything:
 
-1. Log in to your router (usually `192.168.1.1` or
-   `192.168.0.1` in a browser) and find the WAN / Internet IP
+1. Log in to your router (usually `<ROUTER_LAN_IP>` or
+   `<ROUTER_LAN_IP>` in a browser) and find the WAN / Internet IP
    it shows.
 2. On any device, search "what is my ip" and note that address.
 3. Compare them:
@@ -62,7 +62,7 @@ what you set on the router. Check before you change anything:
 
 ## Step 1: give your laptop a fixed Wi-Fi IP
 
-Your laptop's Wi-Fi IP (something like `192.168.1.5`) can
+Your laptop's Wi-Fi IP (something like `<PEER_LAN_IP>`) can
 change every time it reconnects, and then the forwarding rule
 points at the wrong machine. In the router settings, set a
 DHCP reservation for your laptop so it always gets the same

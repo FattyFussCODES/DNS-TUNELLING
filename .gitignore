@@ -8,3 +8,7 @@ recovered_*
 received/
 history.db
 config.json
+reports/
+build/
+dist/
+*.egg-info/

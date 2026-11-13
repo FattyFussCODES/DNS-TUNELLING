@@ -1,0 +1,9 @@
+# Neo4j export note - lab DNS tunnel fixture
+# Created 2026-04-27 by the Neo4j Browser
+id: c07dc072
+title: DNS tunnel transfer test
+note: Small text file used as the demo payload for the GUI screenshots.
+nodes: 3
+relationships: 2
+props: name, label, created
+# padding: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

@@ -7,13 +7,13 @@ internet test later, via a VPS (see below).
 
 ## Your numbers, verified 2026-11-11
 
-- Router (JioFiber JC0500, Wi-Fi `JioFiber-kc1Vd`): `192.168.29.1`
-- Laptop A, decoder (from your `ipconfig` screenshot): `192.168.29.184`
+- Router (JioFiber JC0500, Wi-Fi `JioFiber-kc1Vd`): `<ROUTER_LAN_IP>`
+- Laptop A, decoder (from your `ipconfig` screenshot): `<DECODER_LAN_IP>`
 - Laptop A Wi-Fi MAC (for the DHCP reservation): `64:32:A8:E5:AC:36`
-- Your network is `192.168.29.x` — not `192.168.1.x`. Ignore any
-  `192.168.1.5` example; use `192.168.29.184` everywhere below.
-- Your public IP (what the internet sees): `49.36.139.72`
-- Your router's WAN IP: `10.12.3.110` — a private `10.` address.
+- Your network is `<LAN_SUBNET>` — not `<LAN_SUBNET>`. Ignore any
+  `<PEER_LAN_IP>` example; use `<DECODER_LAN_IP>` everywhere below.
+- Your public IP (what the internet sees): `<PUBLIC_IP>`
+- Your router's WAN IP: `<ROUTER_WAN_IP>` — a private `10.` address.
   That means you are behind CGNAT, so port forwarding from the
   internet to your laptop **cannot work on this connection**
   (see `PORT_FORWARDING_TEST.md`). That does not affect this
@@ -37,18 +37,18 @@ Laptop B (encoder, sender)  ── same Wi-Fi ──>  Laptop A (decoder, receiv
 
 ## Step 0 (once): give Laptop A a fixed Wi-Fi IP
 
-`192.168.29.184` can change when Laptop A reconnects, and then
+`<DECODER_LAN_IP>` can change when Laptop A reconnects, and then
 Laptop B would be sending to the wrong address. Fix it once in
-the router, so Laptop A always gets `192.168.29.184`:
+the router, so Laptop A always gets `<DECODER_LAN_IP>`:
 
-1. In a browser go to `http://192.168.29.1` and log in as `admin`
+1. In a browser go to `http://<ROUTER_LAN_IP>` and log in as `admin`
    (password is on the sticker on the bottom of the router).
 2. Go to **NETWORK**, then **LAN**, then **DHCP** — that is where
    the fixed-IP page lives on this router.
 3. Add a DHCP reservation: MAC `64:32:A8:E5:AC:36` →
-   IP `192.168.29.184`. Save.
+   IP `<DECODER_LAN_IP>`. Save.
 4. Disconnect and reconnect Laptop A's Wi-Fi, then run `ipconfig`
-   and check it still shows `192.168.29.184`.
+   and check it still shows `<DECODER_LAN_IP>`.
 
 If you skip this step, re-check Laptop A's IP with `ipconfig`
 every time before you run the test.
@@ -84,10 +84,10 @@ Then, in that folder on Laptop B:
 
 ```powershell
 # Match the port Laptop A is listening on — 5353 first
-python3 encoder.py examples/secret.txt --server 192.168.29.184 --port 5353 --delay 0.05
+python3 encoder.py examples/secret.txt --server <DECODER_LAN_IP> --port 5353 --delay 0.05
 
 # Once that works, the port-53 version is the same, with --port 53
-python3 encoder.py examples/secret.txt --server 192.168.29.184 --port 53 --delay 0.05
+python3 encoder.py examples/secret.txt --server <DECODER_LAN_IP> --port 53 --delay 0.05
 ```
 
 Do not use `8.8.8.8` here. That is only for the real-domain

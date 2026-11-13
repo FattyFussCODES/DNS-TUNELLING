@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
-import os
 import queue
-import subprocess
-import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .. import config, protocol
+from .. import config as app_config, protocol, report
 from ..utils import format_size, format_time, sha256_file, stamp
-from . import mono_family
+from . import mono_family, open_path, text_tail
 
 LOG_LIMIT = 4000
 ROWS_LIMIT = 2000
 
 
 class ReceiveTab(ttk.Frame):
-    def __init__(self, master) -> None:
+    def __init__(self, master, *, history=None, config=None) -> None:
         super().__init__(master, padding=12)
+        self.history = history
+        self.cfg = dict(config) if config is not None else dict(app_config.DEFAULTS)
         self.receiver: protocol.Receiver | None = None
         self.last_result: dict | None = None
+        self.last_transfer_id: int | None = None
         self._queue: queue.Queue = queue.Queue()
         self._log_lines = 0
         self._slow = False
@@ -54,7 +54,7 @@ class ReceiveTab(ttk.Frame):
         )
 
         ttk.Label(frame, text="Port").grid(row=0, column=2, sticky="w")
-        self.port_var = tk.StringVar(value=str(config.DEFAULT_PORT))
+        self.port_var = tk.StringVar(value=str(self.cfg["port"]))
         ttk.Entry(frame, textvariable=self.port_var, width=8).grid(
             row=0, column=3, sticky="w", padx=(6, 16)
         )
@@ -144,6 +144,9 @@ class ReceiveTab(ttk.Frame):
         self.compare_button = ttk.Button(buttons, text="Compare with original...",
                                          command=self._compare, state="disabled")
         self.compare_button.pack(fill="x", pady=(6, 0))
+        self.report_button = ttk.Button(buttons, text="Generate report",
+                                        command=self._generate_report, state="disabled")
+        self.report_button.pack(fill="x", pady=(6, 0))
         return frame
 
     def _build_log(self) -> ttk.Widget:
@@ -180,7 +183,7 @@ class ReceiveTab(ttk.Frame):
         self._clear_log()
         receiver = protocol.Receiver(
             host, port,
-            out_dir=config.RECEIVED_DIR,
+            out_dir=app_config.received_dir(self.cfg),
             password=password,
             on_event=self._queue.put,
         )
@@ -306,6 +309,39 @@ class ReceiveTab(ttk.Frame):
             self._log("  stream was zlib-compressed")
         if not (event["size_match"] and event["sha256_match"]):
             self._log("  transfer FAILED verification; the saved file is kept for inspection")
+        self._record(event)
+        if self.last_transfer_id is not None:
+            self.report_button.configure(state="normal")
+
+    def _record(self, event: dict) -> None:
+        if self.history is None:
+            return
+        try:
+            port = int(self.port_var.get())
+        except ValueError:
+            port = self.receiver.port if self.receiver else None
+        self.last_transfer_id = self.history.save_transfer(
+            direction="receive",
+            filename=event["filename"],
+            size=event["size"],
+            sha256=event["sha256"],
+            session=event["session"],
+            server=self.host_var.get().strip(),
+            port=port,
+            mode=self.cfg.get("mode", "Custom"),
+            chunks=event["chunks"],
+            result="PASS" if (event["size_match"] and event["sha256_match"]) else "FAIL",
+            time_seconds=event["elapsed"],
+            size_match=event["size_match"],
+            sha256_match=event["sha256_match"],
+            path=event["path"],
+            log=text_tail(self.log),
+        )
+
+    def apply_config(self, config: dict) -> None:
+        """Called by the Settings tab after a save."""
+        self.cfg = dict(config)
+        self.port_var.set(str(self.cfg["port"]))
 
     # -- result actions ----------------------------------------------------
 
@@ -314,17 +350,37 @@ class ReceiveTab(ttk.Frame):
             return
         path = self.last_result["path"]
         try:
-            _open_path(path)
+            open_path(path)
         except OSError as exc:
             messagebox.showerror("Cannot open", str(exc))
 
     def _open_folder(self) -> None:
-        folder = config.RECEIVED_DIR
+        folder = app_config.received_dir(self.cfg)
         folder.mkdir(parents=True, exist_ok=True)
         try:
-            _open_path(str(folder))
+            open_path(str(folder))
         except OSError as exc:
             messagebox.showerror("Cannot open", str(exc))
+
+    def _generate_report(self) -> None:
+        if self.last_transfer_id is None:
+            messagebox.showwarning("No transfer yet",
+                                   "Finish a receive first, then generate its report.")
+            return
+        try:
+            path, kind = report.generate_report(self.last_transfer_id, self.history)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("Report failed", str(exc))
+            return
+        self._log(f"{kind.upper()} report saved to {path}")
+        if messagebox.askyesno(
+            "Report ready",
+            f"{kind.upper()} report written to\n{path}\n\nOpen it now?",
+        ):
+            try:
+                open_path(str(path))
+            except OSError as exc:
+                messagebox.showerror("Cannot open", str(exc))
 
     def _compare(self) -> None:
         if not self.last_result:
@@ -369,11 +425,13 @@ class ReceiveTab(ttk.Frame):
 
     def _clear_results(self) -> None:
         self.last_result = None
+        self.last_transfer_id = None
         for key, var in self.result_vars.items():
             var.set("-")
         for key in ("size_match", "sha256_match"):
             self.__dict__[f"_{key}_label"].configure(style="TLabel")
-        for button in (self.open_button, self.folder_button, self.compare_button):
+        for button in (self.open_button, self.folder_button, self.compare_button,
+                       self.report_button):
             button.configure(state="disabled")
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -385,12 +443,3 @@ class ReceiveTab(ttk.Frame):
         if self.receiver is not None:
             self.receiver.stop()
             self.receiver = None
-
-
-def _open_path(path: str) -> None:
-    if sys.platform.startswith("win"):
-        os.startfile(path)  # type: ignore[attr-defined]
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", path])
-    else:
-        subprocess.Popen(["xdg-open", path])

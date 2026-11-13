@@ -2,5 +2,8 @@
 # Without it the app falls back to a SHA256-XOR + HMAC layer and says so.
 cryptography>=42
 
-# Tests (pip install pytest)
+# Optional: real PDF reports. Without it reports are written as .txt.
+# reportlab>=4
+
+# Tests
 pytest>=8

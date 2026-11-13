@@ -7,7 +7,7 @@ already listening on the Skein address.
 ## What the audience sees
 
 1. Two laptops behind CGNAT join one private mesh and get overlay
-   addresses (e.g. `10.144.144.1`, `10.144.144.2`).
+   addresses (e.g. `<SKEIN_DECODER_IP>`, `<SKEIN_SENDER_IP>`).
 2. A file is smuggled from one laptop to the other hidden inside
    DNS questions, and rebuilt byte-identical on the other side.
 
@@ -16,7 +16,7 @@ already listening on the Skein address.
 On 2026-11-11 at 18:32 UTC the decoder was running on Laptop A:
 
 ```
-Decoder listening on 10.144.144.1:53 for *.dnstunnel.cc.cd
+Decoder listening on <SKEIN_DECODER_IP>:53 for *.dnstunnel.cc.cd
 Waiting for chunks... (Ctrl+C to stop)
 ```
 
@@ -39,12 +39,12 @@ On Laptop B: Skein Desktop → **Join a network** → paste the string
 
 Check on Laptop A: it should now read **Peers 1/1**,
 **Capacity 2 of 5**, with a second node on the map at its own
-`10.144.144.x` address (probably `10.144.144.2`).
+`<SKEIN_IP>` address (probably `<SKEIN_SENDER_IP>`).
 
 Test the mesh from Laptop B:
 
 ```powershell
-ping 10.144.144.1
+ping <SKEIN_DECODER_IP>
 ```
 
 If that replies, the mesh works. If Peers is still 0/0, stop here —
@@ -56,7 +56,7 @@ In PowerShell **as Administrator** (port 53 needs admin rights),
 in the `DNS-TUNELLING` folder:
 
 ```powershell
-python decoder.py --host 10.144.144.1 --port 53
+python decoder.py --host <SKEIN_DECODER_IP> --port 53
 ```
 
 Windows notes, from the 2026-11-11 run:
@@ -76,7 +76,7 @@ is done.
 On Laptop B, in the same `DNS-TUNELLING` folder:
 
 ```powershell
-python encoder.py examples/secret.txt --server 10.144.144.1 --port 53 --delay 0.05
+python encoder.py examples/secret.txt --server <SKEIN_DECODER_IP> --port 53 --delay 0.05
 ```
 
 What you should see:
@@ -122,10 +122,10 @@ if the mesh goes down, the laptops lose each other.
 - `Peers 0/0` on Laptop A → Laptop B has not joined; redo Step 0.
 - `python3` not recognised → use `python`.
 - Decoder says nothing when the encoder runs → check both laptops
-  are in Skein (`ping 10.144.144.1` from Laptop B) and that the
+  are in Skein (`ping <SKEIN_DECODER_IP>` from Laptop B) and that the
   `--port` matches on both sides (53 or 5353).
 - Encoder stops naming a chunk after 3 tries → re-run it; each run
   gets a new session id, so a partial old session is abandoned,
   not mixed in.
 - Fallback that needs no mesh at all: the same-Wi-Fi test in
-  `docs/TWO_LAPTOP_SETUP.md` (decoder on `192.168.29.184`).
+  `docs/TWO_LAPTOP_SETUP.md` (decoder on `<DECODER_LAN_IP>`).
