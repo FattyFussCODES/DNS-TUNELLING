@@ -182,15 +182,15 @@ python -m pytest tests/ -v
 | `tests/test_protocol.py` | 10 | Base32, chunk math, header, DNS packets, numeric sort, dedup names |
 | `tests/test_crypto.py` | 7 | Fernet round trip, wrong password, tamper, XOR fallback |
 | `tests/test_loopback.py` | 5 | real UDP round trip, encrypted 11 KB, 30 KB > 999 chunks, bad password, no overwrite |
-| `tests/test_detector.py` | 9 | entropy, length, rate, unique-name rule, 2-rule warning, cooldown |
+| `tests/test_detector.py` | 11 | entropy, length, rate, unique-name rule, 2-rule warning, cooldown, shared-socket tap |
 | `tests/test_report.py` | 4 | every required field, missing id, txt fallback, real PDF header |
 
 Last run on this machine, verbatim:
 
 ```
 $ python -m pytest tests/ -q
-...................................                                      [100%]
-35 passed in 3.18s
+.....................................                                    [100%]
+37 passed in 3.71s
 ```
 
 ## Tabs
@@ -202,11 +202,14 @@ $ python -m pytest tests/ -q
 - **History** — every send and receive recorded in `history.db` (SQLite):
   date, filename, size, session, server, mode, chunks, result, time taken.
   Refresh, clear, export CSV, generate a report.
-- **Detector** — length, entropy and rate rules over live DNS-shaped traffic,
-  queries-per-second chart on a Canvas, alerts list, and a "Possible DNS
-  tunnel detected" banner when two or more rules fire within 60 seconds.
-  Two self-tests: run the encoder and watch it get flagged, send ordinary
-  DNS names and watch them pass.
+- **Detector** — a passive tap on the **Receive tab's** listener: one socket,
+  no second bind, so it can watch the same port as the receiver. Length,
+  entropy and rate rules, queries-per-second chart on a Canvas, alerts list,
+  and a "Possible DNS tunnel detected" banner when two or more rules fire
+  within 60 seconds. **Start monitoring** starts that shared listener if it
+  is not running; **Stop monitoring** only detaches, the receiver keeps
+  listening. Two self-tests: real encoder chunks get flagged, ordinary DNS
+  names pass.
 - **Settings** — defaults, transport mode, receiver folder, history path,
   Skein/Playit detection, About. Domain mode stays disabled behind a warning
   until the public relay test is verified.
@@ -223,8 +226,10 @@ $ python -m pytest tests/ -q
 - DNS-over-HTTPS would bypass this channel entirely.
 - Easy to flag with length, entropy and rate heuristics at high speed — which
   is exactly what the Detector tab demonstrates.
-- The detector watches one UDP port you point it at. It is not a passive
-  sniffer and cannot see traffic that bypasses that socket.
+- The detector sees exactly what reaches the receiver's socket: tunnel
+  queries plus any ordinary DNS sent to that host and port. It is not a
+  promiscuous sniffer and cannot see traffic addressed elsewhere on the
+  network.
 
 ## Safety
 

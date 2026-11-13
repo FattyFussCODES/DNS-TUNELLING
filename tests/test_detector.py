@@ -107,3 +107,78 @@ def test_alerts_are_rate_limited_but_rules_keep_firing():
     assert first["alerts"]
     assert again["alerts"] == []          # cooldown suppresses the duplicate
     assert later["alerts"]                # and it comes back
+
+
+def test_receiver_tap_sees_ordinary_and_tunnel_queries(tmp_path):
+    """The detector's feed is the receiver's socket, not a second bind."""
+    import socket
+    import time
+
+    from app import protocol
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    seen: list[tuple[str, str]] = []
+    events: list[dict] = []
+    receiver = protocol.Receiver(
+        "127.0.0.1", port, out_dir=tmp_path / "received",
+        on_event=events.append, on_query=lambda name, src: seen.append((name, src)),
+    )
+    receiver.start()
+    try:
+        stream, header = protocol.build_stream(b"tap test", "tap.txt", compress=False)
+        tunnel_qname = f"001.{protocol.chunk_stream(stream)[0]}.{header['session']}.dnstunnel.cc.cd"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            assert protocol.send_query(sock, "www.google.com", "127.0.0.1", port,
+                                       timeout=1.0, max_retries=1)
+            assert protocol.send_query(sock, tunnel_qname, "127.0.0.1", port,
+                                       timeout=1.0, max_retries=1)
+        finally:
+            sock.close()
+        deadline = time.time() + 5
+        while time.time() < deadline and len(seen) < 2:
+            time.sleep(0.02)
+    finally:
+        receiver.stop()
+
+    names = [name for name, _ in seen]
+    assert "www.google.com" in names
+    assert tunnel_qname in names
+    # the ordinary name is still ignored for file rebuilding, only tapped
+    assert receiver.stats["ignored"] >= 1
+    assert not any(event["type"] == "complete" for event in events)
+
+
+def test_a_failing_tap_never_kills_the_listener(tmp_path):
+    import socket
+
+    from app import protocol
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    def boom(name, source):
+        raise RuntimeError("tap exploded")
+
+    events: list[dict] = []
+    receiver = protocol.Receiver(
+        "127.0.0.1", port, out_dir=tmp_path / "received",
+        on_event=events.append, on_query=boom,
+    )
+    receiver.start()
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            assert protocol.send_query(sock, "www.google.com", "127.0.0.1", port,
+                                       timeout=1.0, max_retries=1)
+        finally:
+            sock.close()
+        assert receiver.running
+    finally:
+        receiver.stop()

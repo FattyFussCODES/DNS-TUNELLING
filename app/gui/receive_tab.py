@@ -23,6 +23,9 @@ class ReceiveTab(ttk.Frame):
         self.receiver: protocol.Receiver | None = None
         self.last_result: dict | None = None
         self.last_transfer_id: int | None = None
+        # Passive tap for the Detector tab: called on the listener thread for
+        # every parsed DNS question, including names this receiver ignores.
+        self.query_sink = None
         self._queue: queue.Queue = queue.Queue()
         self._log_lines = 0
         self._slow = False
@@ -186,6 +189,7 @@ class ReceiveTab(ttk.Frame):
             out_dir=app_config.received_dir(self.cfg),
             password=password,
             on_event=self._queue.put,
+            on_query=self._on_query,
         )
         self.receiver = receiver
         try:
@@ -213,6 +217,28 @@ class ReceiveTab(ttk.Frame):
         self.start_button.configure(state="normal")
         self.stop_button.configure(state="disabled")
         self._set_status("Stopped", ok=False)
+
+    def _on_query(self, qname: str, source: str) -> None:
+        sink = self.query_sink
+        if sink is not None:
+            sink(qname, source)
+
+    @property
+    def listen_port(self) -> int | None:
+        return self.receiver.port if self.receiver is not None else None
+
+    def start_listening(self) -> tuple[bool, str]:
+        """Start the one shared listener if it is not running.
+
+        Returns (ok, "host:port" or the error message). The Detector tab calls
+        this instead of opening a socket of its own.
+        """
+        if self.receiver is not None and self.receiver.running:
+            return True, f"{self.host_var.get()}:{self.receiver.port}"
+        self._start()
+        if self.receiver is not None and self.receiver.running:
+            return True, f"{self.host_var.get()}:{self.receiver.port}"
+        return False, self.status_var.get()
 
     def _set_status(self, text: str, *, ok: bool) -> None:
         self.status_var.set(text)

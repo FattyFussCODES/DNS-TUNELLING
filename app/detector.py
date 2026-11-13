@@ -1,26 +1,19 @@
 """DNS tunnel detection: length, entropy and rate rules over live queries.
 
-Two layers:
+One layer: `Detector`. It owns no socket and never binds a port. The GUI
+feeds it through `protocol.Receiver.on_query`, i.e. it is a passive tap on
+the receiver's single listening socket, so a detector and a receiver can
+observe the same port at the same time.
 
-* `Detector` - pure logic, no sockets. Feed it (`qname`, `source`) and it
-  returns the alerts that query fired, plus whether two or more distinct
-  rules have fired inside the warning window.
-* `Monitor` - a UDP listener for the GUI's Detector tab. It ACKs queries
-  (so the lab encoder can finish) and forwards everything to the Detector.
-
-It watches one socket you point it at. It is not a passive sniffer.
+Feed it (`qname`, `source`) and it returns the alerts that query fired,
+plus whether two or more distinct rules have fired inside the warning window.
 """
 
 from __future__ import annotations
 
 import math
-import socket
-import threading
 import time
 from collections import deque
-from typing import Callable
-
-from . import protocol
 
 LENGTH_LABEL_LIMIT = 40       # a single label longer than this is suspicious
 LENGTH_QUERY_LIMIT = 60       # so is a whole name longer than this
@@ -200,96 +193,3 @@ class Detector:
         self._rule_fires.clear()
         self._last_alert.clear()
         self.queries = self.alerts = self.warnings = 0
-
-
-class Monitor:
-    """UDP listener feeding a Detector. Binds in `start()` so errors surface."""
-
-    def __init__(
-        self,
-        detector: Detector | None = None,
-        host: str = "0.0.0.0",
-        port: int = 53,
-        *,
-        on_event: Callable[[dict], None] | None = None,
-    ) -> None:
-        self.detector = detector or Detector()
-        self.host = host
-        self.port = int(port)
-        self.on_event = on_event
-        self._sock: socket.socket | None = None
-        self._thread: threading.Thread | None = None
-        self._stop = threading.Event()
-
-    @property
-    def running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
-    def start(self) -> None:
-        if self.running:
-            return
-        family = socket.AF_INET6 if ":" in self.host else socket.AF_INET
-        sock = socket.socket(family, socket.SOCK_DGRAM)
-        bind_addr = ((self.host, self.port, 0, 0) if family == socket.AF_INET6
-                     else (self.host, self.port))
-        try:
-            sock.bind(bind_addr)
-        except OSError:
-            sock.close()
-            raise
-        sock.settimeout(0.2)
-        self._sock = sock
-        self.port = sock.getsockname()[1]
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="dnstunnel-detector",
-                                        daemon=True)
-        self._thread.start()
-        self._emit({"type": "listening", "host": self.host, "port": self.port})
-
-    def stop(self) -> None:
-        self._stop.set()
-        thread = self._thread
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=2.0)
-        self._thread = None
-        sock, self._sock = self._sock, None
-        if sock is not None:
-            try:
-                sock.close()
-            except OSError:
-                pass
-        self._emit({"type": "stopped"})
-
-    def _emit(self, event: dict) -> None:
-        if self.on_event is not None:
-            self.on_event(event)
-
-    def _run(self) -> None:
-        sock = self._sock
-        assert sock is not None
-        while not self._stop.is_set():
-            try:
-                packet, addr = sock.recvfrom(2048)
-            except socket.timeout:
-                continue
-            except OSError as exc:
-                if self._stop.is_set():
-                    break
-                self._emit({"type": "error", "message": f"socket: {exc}"})
-                break
-            try:
-                qid, qname, question = protocol.parse_dns_query(packet)
-            except protocol.ProtocolError as exc:
-                self._emit({"type": "ignored", "reason": str(exc)})
-                continue
-            try:
-                sock.sendto(protocol.build_dns_response(qid, question), addr)
-            except OSError:
-                pass
-            result = self.detector.observe(qname, addr[0])
-            self._emit({
-                "type": "query",
-                "qname": qname,
-                "source": addr[0],
-                **{k: result[k] for k in ("time", "alerts", "warning", "rules_in_window")},
-            })

@@ -36,7 +36,8 @@ class MainWindow:
         self.receive_tab = ReceiveTab(self.notebook, history=self.history,
                                       config=self.config)
         self.history_tab = HistoryTab(self.notebook, self.history)
-        self.detector_tab = DetectorTab(self.notebook, config=self.config)
+        self.detector_tab = DetectorTab(self.notebook, receiver=self.receive_tab,
+                                        config=self.config)
         self.settings_tab = SettingsTab(
             self.notebook, config=self.config, on_save=self._apply_settings
         )
@@ -46,6 +47,8 @@ class MainWindow:
         self.notebook.add(self.history_tab, text="  History  ")
         self.notebook.add(self.detector_tab, text="  Detector  ")
         self.notebook.add(self.settings_tab, text="  Settings  ")
+        # One socket: the receiver's. The detector is a passive tap on it.
+        self.receive_tab.query_sink = self.detector_tab.observe_query
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
 
         footer = ttk.Label(

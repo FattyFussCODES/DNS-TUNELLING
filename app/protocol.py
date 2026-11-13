@@ -365,6 +365,10 @@ class Receiver:
     `start()` binds the socket synchronously, so a busy port or a missing
     privilege raises right away instead of dying inside the thread. Events
     are delivered on the listener thread through `on_event`.
+
+    `on_query(qname, source)` is a passive tap for the detector: it fires for
+    every DNS question that parses, including names this receiver ignores
+    (ordinary DNS). The receiver owns the only socket; consumers share it.
     """
 
     def __init__(
@@ -377,6 +381,7 @@ class Receiver:
         password: str | None = None,
         domain: str = DOMAIN,
         on_event: EventHook | None = None,
+        on_query: Callable[[str, str], None] | None = None,
     ) -> None:
         self.host = host
         self.port = int(port)
@@ -385,6 +390,7 @@ class Receiver:
         self.password = password
         self.domain = domain
         self.on_event = on_event
+        self.on_query = on_query
         self.stats = {"queries": 0, "chunks": 0, "ignored": 0, "sessions": 0}
         self._sessions: dict[str, dict[int | str, str]] = {}
         self._started_at: dict[str, float] = {}
@@ -468,6 +474,13 @@ class Receiver:
             except OSError:
                 pass
             self.stats["queries"] += 1
+
+            if self.on_query is not None:
+                try:
+                    self.on_query(qname, addr[0])
+                except Exception:
+                    # A tap must never kill the listener.
+                    pass
 
             parsed = parse_qname(qname, self.domain)
             if parsed is None:
